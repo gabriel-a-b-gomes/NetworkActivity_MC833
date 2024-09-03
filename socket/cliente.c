@@ -15,13 +15,15 @@
 int main(int argc, char **argv) {
     int    sockfd, n;
     char   recvline[MAXLINE + 1];
+    char   sendline[MAXLINE + 1];
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr;
 
-    if (argc != 2) {
+    if (argc != 3) {
         strcpy(error,"uso: ");
         strcat(error,argv[0]);
         strcat(error," <IPaddress>");
+        strcat(error," <Port>");
         perror(error);
         exit(1);
     }
@@ -33,7 +35,7 @@ int main(int argc, char **argv) {
 
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
-    servaddr.sin_port   = htons(13);
+    servaddr.sin_port   = htons(atoi(argv[2]));
     if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
         perror("inet_pton error");
         exit(1);
@@ -41,6 +43,24 @@ int main(int argc, char **argv) {
 
     if (connect(sockfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) < 0) {
         perror("connect error");
+        exit(1);
+    }
+
+    socklen_t servaddr_len = sizeof(servaddr);
+    if (getsockname(sockfd, (struct sockaddr*)&servaddr, &servaddr_len) == -1) {
+        perror("getsockname");
+        exit(1);
+    }
+
+    char s_addr[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(servaddr.sin_addr), s_addr, INET_ADDRSTRLEN);
+    printf("Socket IP: %s\n", s_addr);
+    printf("Socket porta: %d\n", ntohs(servaddr.sin_port));
+
+    fgets(sendline, MAXLINE, stdin);
+
+    if (write(sockfd, sendline, MAXLINE) < 0) {
+        perror("write");
         exit(1);
     }
 
