@@ -30,6 +30,7 @@ int main (int argc, char **argv) {
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family      = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    // Obtem a porta de forma automática (Ex.: 4)
     servaddr.sin_port        = htons(0);   
 
     if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
@@ -37,6 +38,7 @@ int main (int argc, char **argv) {
         exit(1);
     }
 
+    // Exibe o IP e Porta onde o servidor socket irá escutar (Ex.: 4)
     socklen_t servaddr_len = sizeof(servaddr);
     if (getsockname(listenfd, (struct sockaddr*)&servaddr, &servaddr_len) == -1) {
         perror("getsockname");
@@ -56,6 +58,7 @@ int main (int argc, char **argv) {
         exit(1);
         }
 
+        // Obtem e exibe o IP e Porta do peer conectado (Ex.: 6)
         struct sockaddr_in peeraddr;
         socklen_t peeraddr_len = sizeof(peeraddr);
         if (getpeername(connfd, (struct sockaddr*)&peeraddr, &peeraddr_len) == -1) {
@@ -67,11 +70,13 @@ int main (int argc, char **argv) {
         inet_ntop(AF_INET, &(peeraddr.sin_addr), p_addr, INET_ADDRSTRLEN);
         printf("Conexão recebida (%s, %d)\n", p_addr, ntohs(peeraddr.sin_port));
 
+        // Recebe a mensagem enviada pelo cliente (Ex.: 7)
         int n = read(connfd, recvline, MAXLINE);
         recvline[n] = 0;
 
         printf("Mensagem recebida: %s\n", recvline);
 
+        // Envia a mensagem padrao para o cliente
         ticks = time(NULL);
         snprintf(buf, sizeof(buf), "Hello from server!\nTime: %.24s\r\n", ctime(&ticks));
         write(connfd, buf, strlen(buf));
