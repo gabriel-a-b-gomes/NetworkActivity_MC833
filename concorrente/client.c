@@ -10,7 +10,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define MAXLINE 4096
+#define MAXDATASIZE 2100
+#define MAXLINE 2048
 
 int Socket(int family, int type, int flags) {
     int sockfd;
@@ -48,6 +49,13 @@ void GetSockName(int sockfd, struct sockaddr* servaddr, socklen_t servaddr_len) 
     }
 }
 
+void GetPeerName(int connfd, struct sockaddr* peeraddr, socklen_t peeraddr_len) {
+    if (getpeername(connfd, peeraddr, &peeraddr_len) == -1) {
+        perror("getsockname");
+        exit(1);
+    }
+}
+
 void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, int addr_len) {
     char p_addr[addr_len];
     inet_ntop(family, &(sockinfos.sin_addr), p_addr, addr_len);
@@ -58,9 +66,11 @@ void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, 
 int main(int argc, char **argv) {
     int    sockfd, n;
     char   recvline[MAXLINE + 1];
-    char   sendline[MAXLINE + 1];
+    char   sendline[MAXDATASIZE + 1];
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr;
+
+    char prefixo[] = "tarefa";
 
     if (argc != 3) {
         strcpy(error,"uso: ");
@@ -77,38 +87,43 @@ int main(int argc, char **argv) {
 
     GetSockName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
 
-    PrintSockName("Socket local", servaddr, AF_INET, INET_ADDRSTRLEN);
+    PrintSockName("Socket Local", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    // fgets(sendline, MAXLINE, stdin);
+    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
 
-    // if (write(sockfd, sendline, MAXLINE) < 0) {
-    //     perror("write");
-    //     exit(1);
-    // }
+    PrintSockName("Socket Servidor", servaddr, AF_INET, INET_ADDRSTRLEN);
 
     while ( (n = read(sockfd, recvline, MAXLINE)) > 0) {
         recvline[n] = 0;
 
-        printf("> %s\n", recvline);
+        printf("> RECEBIDO: %s\n", recvline);
 
-        // if (fputs(recvline, stdout) == EOF) {
-        //     perror("fputs error");
-        //     exit(1);
-        // }
-
-        if (strcmp(recvline, "TAREFA: LIMPEZA") == 0) {
+        if (strncasecmp(recvline, prefixo, strlen(prefixo)) == 0) {
             sleep(5);
 
-            snprintf(sendline, MAXLINE, "TAREFA_LIMPEZA CONCLUÍDA");
+            memset(sendline, 0, sizeof(sendline));
 
-            printf("%s\n", sendline);
+            snprintf(sendline, MAXDATASIZE, "%s CONCLUÍDA", recvline);
 
-            if (write(sockfd, recvline, MAXLINE) < 0) {
+            if (write(sockfd, sendline, MAXDATASIZE) < 0) {
                 perror("write");
                 exit(1);
             }
 
-            printf("< TAREFA_LIMPEZA CONCLUÍDA");
+            printf("< ENVIADO: %s CONCLUÍDA\n", recvline);
+        }
+
+        if (strcmp(recvline, "ENCERRAR") == 0) {
+
+            snprintf(sendline, MAXDATASIZE, "ENCERRAR\n");
+
+            if (write(sockfd, sendline, MAXDATASIZE) < 0) {
+                perror("write");
+                exit(1);
+            }
+
+            close(sockfd);
+            break;
         }
     }
 

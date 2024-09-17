@@ -14,6 +14,27 @@
 #define MAXDATASIZE 100
 #define MAXLINE 4096
 
+
+FILE * OpenFile(char * fileName) {
+    FILE *file = fopen(fileName, "w");
+
+    if (file == NULL) {
+        perror("Arquivo not found");
+        exit(1);
+    }
+
+    return file;
+}
+
+void WriteFile(FILE * file, char * message, char * addr, int port) {
+    fprintf(file, "%s | Cliente (%s, %d)\n", message, addr, port);
+}
+
+void CloseFile(FILE * file) {
+    fclose(file);
+}
+
+
 int Socket(int family, int type, int flags) {
     int sockfd;
 
@@ -31,7 +52,7 @@ void Bind(int sockfd, int family, int port) {
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family      = family;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port        = htons(0);   
+    servaddr.sin_port        = htons(port);   
 
     if (bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
         perror("bind");
@@ -85,28 +106,79 @@ void WriteWelcomeMessage(int connfd) {
     snprintf(buf, sizeof(buf), "Hello from server!\nTime: %.24s\r\n", ctime(&ticks));
 
     write(connfd, buf, strlen(buf));
+
+    sleep(1);
 }
 
-void ProcessTasks(int connfd, char* recvline) {
+
+char * GetTask(int taskid) {
+    switch (taskid)
+    {
+        case 1: 
+            return "TAREFA:LIMPEZA";
+        case 2: 
+            return "TAREFA:FORMATACAO";
+        case 3: 
+            return "TAREFA:RESTAURACAO";
+        case 4: 
+            return "TAREFA:PEDIDO";
+        case 5: 
+            return "TAREFA:REPORTAR";
+        default:
+            return "TAREFA:NOP";
+    }
+
+    return "TAREFA:NOP";
+}
+
+
+void ProcessTasks(int connfd, int taskid, FILE *file, char* addr, int port) {
     int n;
     char buf[MAXDATASIZE];
+    char recvline[MAXLINE + 1];
+    char template[MAXLINE + 1];
 
-    snprintf(buf, sizeof(buf), "TAREFA: LIMPEZA");
+    char* task = GetTask(taskid);
+
+    snprintf(template, MAXLINE, "%s CONCLUÍDA", task);
+
+    snprintf(buf, sizeof(buf), "%s", task);
 
     write(connfd, buf, strlen(buf));
+
+    printf("< ENVIADO: %s\n", task);
+
+    WriteFile(file, buf, addr, port);
 
     while ( (n = read(connfd, recvline, sizeof(recvline))) > 0) {
         recvline[n] = 0;
 
-        printf("> %s\n", recvline);
+        printf("> RECEBIDO: %s\n", recvline);
+        WriteFile(file, recvline, addr, port);
 
-        // if (fputs(recvline, stdout) == EOF) {
-        //     perror("fputs error");
-        //     exit(1);
-        // }
-
-        if (strcmp(recvline, "TAREFA_LIMPEZA CONCLUÍDA") == 0)
+        if (strcmp(recvline, template) == 0)
             break;
+    }
+}
+
+void SendCloseMessage(int connfd) {
+    char   buf[MAXDATASIZE];
+
+    snprintf(buf, sizeof(buf), "ENCERRAR");
+
+    write(connfd, buf, strlen(buf));
+}
+
+void ReceiveCloseMessage(int connfd) {
+    int n;
+    char recvline[MAXLINE + 1];
+
+    while ( (n = read(connfd, recvline, sizeof(recvline))) > 0) {
+        recvline[n] = 0;
+
+        if (strcmp(recvline, "ENCERRAR") == 0) {
+            break;
+        }
     }
 }
 
@@ -125,15 +197,24 @@ int Fork() {
     return pid;
 }
 
+
+
 int main (int argc, char **argv) {
     int    listenfd, connfd;
-    
-    char   recvline[MAXLINE + 1];
+    char   error[MAXLINE + 1];
     pid_t pid;
+
+    if (argc != 2) {
+        strcpy(error,"uso: ");
+        strcat(error,argv[0]);
+        strcat(error," <Port>");
+        perror(error);
+        exit(1);
+    }
 
     listenfd = Socket(AF_INET, SOCK_STREAM, 0);
 
-    Bind(listenfd, AF_INET, 0);
+    Bind(listenfd, AF_INET, atoi(argv[1]));
 
     struct sockaddr_in servaddr;
 
@@ -143,6 +224,8 @@ int main (int argc, char **argv) {
 
     Listen(listenfd, LISTENQ);
 
+    FILE *file = OpenFile("server_operation.log");
+
     for ( ; ; ) {
         struct sockaddr_in peeraddr;
 
@@ -151,14 +234,29 @@ int main (int argc, char **argv) {
         if ((pid = Fork()) == 0) 
         {
             Close(listenfd);
+            
+            int min_tasks = 1;
+            int max_tasks = 5;
+            int num_tasks = min_tasks + rand() % (max_tasks - min_tasks + 1);
 
             GetPeerName(connfd, (struct sockaddr*)&peeraddr, sizeof(peeraddr));
+
+            char paddrClient[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &(peeraddr.sin_addr), paddrClient, INET_ADDRSTRLEN);
+
+            int portClient = ntohs(peeraddr.sin_port);
 
             PrintSockName("Conexão Recebida", peeraddr, AF_INET, INET_ADDRSTRLEN);
 
             WriteWelcomeMessage(connfd);
 
-            ProcessTasks(connfd, recvline);
+            int i = 1;
+            while (i <= num_tasks) { 
+                ProcessTasks(connfd, i, file, paddrClient, portClient);
+                i++;
+            }
+
+            SendCloseMessage(connfd);
 
             Close(connfd);
 
@@ -167,5 +265,7 @@ int main (int argc, char **argv) {
 
         Close(connfd);
     }
+
+    CloseFile(file);
     return(0);
 }
