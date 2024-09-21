@@ -14,30 +14,46 @@
 #define MAXDATASIZE 100
 #define MAXLINE 4096
 
+// ==================== FILE ==================== //
 
 FILE * OpenFile(char * fileName) {
+    // Abre o descritor do arquivo baseado no filename
     FILE *file = fopen(fileName, "w");
 
     if (file == NULL) {
-        perror("Arquivo not found");
+        perror("Arquivo não encontrado");
         exit(1);
     }
 
     return file;
 }
 
-void WriteFile(FILE * file, char * message, char * addr, int port) {
-    fprintf(file, "%s | Cliente (%s, %d)\n", message, addr, port);
+void WriteFile(FILE * file, char * type, char * message, char * addr, int port) {
+    time_t ticks;
+
+    ticks = time(NULL);
+
+    // Retira o \n da mensagem de tempo
+    char *time_str = ctime(&ticks);
+    time_str[strlen(time_str) - 1] = '\0';
+
+    // Escreve no arquivo um novo log, com o tempo, cliente e mensagem
+    fprintf(file, "[%s] Cliente (%s, %d) | <%s> %s\n", time_str, addr, port, type, message);
+    fflush(file);
 }
 
 void CloseFile(FILE * file) {
     fclose(file);
 }
 
+// ==================== FILE ==================== //
+
+// =================== SOCKET =================== //
 
 int Socket(int family, int type, int flags) {
     int sockfd;
 
+    // Instancia um descritor do socket
     if ((sockfd = socket(family, type, flags)) == -1) {
         perror("socket");
         exit(1);
@@ -54,6 +70,7 @@ void Bind(int sockfd, int family, int port) {
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     servaddr.sin_port        = htons(port);   
 
+    // Binda a configuração do socket
     if (bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
         perror("bind");
         exit(1);
@@ -61,6 +78,7 @@ void Bind(int sockfd, int family, int port) {
 }
 
 void GetSockName(int sockfd, struct sockaddr* servaddr, socklen_t servaddr_len) {
+    // Obtem as informações do socket local
     if (getsockname(sockfd, servaddr, &servaddr_len) == -1) {
         perror("getsockname");
         exit(1);
@@ -68,6 +86,7 @@ void GetSockName(int sockfd, struct sockaddr* servaddr, socklen_t servaddr_len) 
 }
 
 void Listen(int sockfd, int listenQ) {
+    // Inicia a escuta por novas conexões
     if (listen(sockfd, listenQ) == -1) {
         perror("listen");
         exit(1);
@@ -77,6 +96,7 @@ void Listen(int sockfd, int listenQ) {
 int Accept(int sockfd) {
     int connfd;
 
+    // Aceita uma nova conexão
     if ((connfd = accept(sockfd, (struct sockaddr *) NULL, NULL)) == -1 ) {
         perror("accept");
         exit(1);
@@ -86,6 +106,7 @@ int Accept(int sockfd) {
 }
 
 void GetPeerName(int connfd, struct sockaddr* peeraddr, socklen_t peeraddr_len) {
+    // Obtem as informações do peer que conectou-se
     if (getpeername(connfd, peeraddr, &peeraddr_len) == -1) {
         perror("getsockname");
         exit(1);
@@ -95,6 +116,8 @@ void GetPeerName(int connfd, struct sockaddr* peeraddr, socklen_t peeraddr_len) 
 void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, int addr_len) {
     char p_addr[addr_len];
     inet_ntop(family, &(sockinfos.sin_addr), p_addr, addr_len);
+
+    // Printa no terminal o IP e Porta do socket
     printf("%s (%s, %d)\n", description, p_addr, ntohs(sockinfos.sin_port));
 }
 
@@ -105,6 +128,7 @@ void WriteWelcomeMessage(int connfd) {
     ticks = time(NULL);
     snprintf(buf, sizeof(buf), "Hello from server!\nTime: %.24s\r\n", ctime(&ticks));
 
+    // Escreve a mensagem de boas vindas para o cliente
     write(connfd, buf, strlen(buf));
 
     sleep(1);
@@ -112,6 +136,7 @@ void WriteWelcomeMessage(int connfd) {
 
 
 char * GetTask(int taskid) {
+    // Seleção de uma task a partir da task id
     switch (taskid)
     {
         case 1: 
@@ -138,57 +163,55 @@ void ProcessTasks(int connfd, int taskid, FILE *file, char* addr, int port) {
     char recvline[MAXLINE + 1];
     char template[MAXLINE + 1];
 
+    // Obtem a task que será processada
     char* task = GetTask(taskid);
 
+    // Template de conclusao da task - nome_task CONCLUIDA
     snprintf(template, MAXLINE, "%s CONCLUÍDA", task);
 
     snprintf(buf, sizeof(buf), "%s", task);
 
+    // Envia ao cliente a task para processamento
     write(connfd, buf, strlen(buf));
 
-    printf("< ENVIADO: %s\n", task);
+    // Escreve no arquivo de logs que foi enviada uma nova tarefa
+    WriteFile(file, "ENVIADO", buf, addr, port);
 
-    WriteFile(file, buf, addr, port);
-
+    // Aguarda pela leitura de uma nova mensagem
     while ( (n = read(connfd, recvline, sizeof(recvline))) > 0) {
         recvline[n] = 0;
 
-        printf("> RECEBIDO: %s\n", recvline);
-        WriteFile(file, recvline, addr, port);
+        // Escreve nos logs a mensagem recebida do cliente
+        WriteFile(file, "RECEBIDO", recvline, addr, port);
 
+        // Verifica se a mensagem é igual ao template definido
         if (strcmp(recvline, template) == 0)
             break;
     }
 }
 
-void SendCloseMessage(int connfd) {
+void SendCloseMessage(int connfd, FILE *file, char* addr, int port) {
     char   buf[MAXDATASIZE];
 
     snprintf(buf, sizeof(buf), "ENCERRAR");
+    WriteFile(file, "ENVIADO", buf, addr, port);
 
+    // Envia uma mensagem ao cliente para encerrar
     write(connfd, buf, strlen(buf));
-}
-
-void ReceiveCloseMessage(int connfd) {
-    int n;
-    char recvline[MAXLINE + 1];
-
-    while ( (n = read(connfd, recvline, sizeof(recvline))) > 0) {
-        recvline[n] = 0;
-
-        if (strcmp(recvline, "ENCERRAR") == 0) {
-            break;
-        }
-    }
 }
 
 void Close(int sockfd) {
     close(sockfd);
 }
 
+// =================== SOCKET =================== //
+
+// ==================== FORK ==================== //
+
 int Fork() {
     pid_t pid;
 
+    // Cria um processo filho
     if ((pid = fork()) < 0) {
         perror("fork");
         exit(1);
@@ -197,13 +220,14 @@ int Fork() {
     return pid;
 }
 
-
+// ==================== FORK ==================== //
 
 int main (int argc, char **argv) {
     int    listenfd, connfd;
     char   error[MAXLINE + 1];
     pid_t pid;
 
+    // Verifica se a porta foi passada como parâmetro
     if (argc != 2) {
         strcpy(error,"uso: ");
         strcat(error,argv[0]);
@@ -214,16 +238,19 @@ int main (int argc, char **argv) {
 
     listenfd = Socket(AF_INET, SOCK_STREAM, 0);
 
+    // Passa como parâmetro a porta escolhida por onde o socket irá trocar mensagem
     Bind(listenfd, AF_INET, atoi(argv[1]));
 
     struct sockaddr_in servaddr;
 
+    // Mostra o IP e Porta do servidor socket
     GetSockName(listenfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-
     PrintSockName("Socket em execução", servaddr, AF_INET, INET_ADDRSTRLEN);
 
+    // Comeca a escuta por novas conexões
     Listen(listenfd, LISTENQ);
 
+    // Abertura do arquivo de logs
     FILE *file = OpenFile("server_operation.log");
 
     for ( ; ; ) {
@@ -231,16 +258,20 @@ int main (int argc, char **argv) {
 
         connfd = Accept(listenfd);
 
+        // Quando uma nova conexao é aceita, o servidor cria um novo processo 
+        // que é responsavel por trocar mensagens com o cliente 
         if ((pid = Fork()) == 0) 
         {
             Close(listenfd);
             
             int min_tasks = 1;
             int max_tasks = 5;
+            // Sorteia um número de tasks a serem processadas
             int num_tasks = min_tasks + rand() % (max_tasks - min_tasks + 1);
 
+            // Obtem-se o IP e Porta do cliente para uso posteriores
+            // Esse será usado para identificar o cliente nos logs
             GetPeerName(connfd, (struct sockaddr*)&peeraddr, sizeof(peeraddr));
-
             char paddrClient[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &(peeraddr.sin_addr), paddrClient, INET_ADDRSTRLEN);
 
@@ -248,16 +279,21 @@ int main (int argc, char **argv) {
 
             PrintSockName("Conexão Recebida", peeraddr, AF_INET, INET_ADDRSTRLEN);
 
+            // Envia uma mensagem de boas vindas para o cliente
             WriteWelcomeMessage(connfd);
 
+            // Processa n tasks
             int i = 1;
             while (i <= num_tasks) { 
+                // Passa o id da task a ser processada
                 ProcessTasks(connfd, i, file, paddrClient, portClient);
                 i++;
             }
 
-            SendCloseMessage(connfd);
+            // Ao final do processamento envia-se uma mensagem de encerrar o servidor
+            SendCloseMessage(connfd, file, paddrClient, portClient);
 
+            // Fecha-se a conexão com o cliente
             Close(connfd);
 
             exit(0);
