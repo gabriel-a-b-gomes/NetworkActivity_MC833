@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 
 def run_server(port, backlog):
     cmd = f"./server {port} {backlog}" 
-    proc = subprocess.run(cmd, shell=True)
+    proc = subprocess.Popen(cmd, shell=True)
     return proc
 
 def run_client(client_id, results, port):
     start = time.time()
     try:
-        subprocess.run(f"./client 127.0.0.1 {port}", shell=True, timeout=10)
+        subprocess.run(f"./client 127.0.0.1 {port}", shell=True, timeout=5)
         end = time.time()
         results.append({ "client_id": client_id, "time": end - start, "sucesso": True })  # Sucesso na conexão
     except subprocess.TimeoutExpired:
@@ -58,6 +58,8 @@ def evaluate_performance(port):
         avg_response_times.append(avg_time)
         successful_connections.append(successful_conn)
         print(f"Backlog {backlog}: Tempo médio = {avg_time:.3f}s, Qtde. conn. estabelecidas = {successful_conn}/{len(results)}")
+
+        port += 1
 
     plt.figure(figsize=(10, 5))
     
