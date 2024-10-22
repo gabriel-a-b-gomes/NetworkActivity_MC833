@@ -9,8 +9,9 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
-#define LISTENQ 10
+// #define LISTENQ 10
 #define MAXDATASIZE 100
 #define MAXLINE 4096
 
@@ -85,9 +86,9 @@ void GetSockName(int sockfd, struct sockaddr* servaddr, socklen_t servaddr_len) 
     }
 }
 
-void Listen(int sockfd, int listenQ) {
+void Listen(int sockfd, int backlog) {
     // Inicia a escuta por novas conexões
-    if (listen(sockfd, listenQ) == -1) {
+    if (listen(sockfd, backlog) == -1) {
         perror("listen");
         exit(1);
     }
@@ -173,15 +174,32 @@ int Fork() {
 
 typedef void Sigfunc(int);
 
-Sigfunc * Signal(int signo, SigFunc * func) {
+Sigfunc * Signal(int signo, Sigfunc * func) {
     struct sigaction act, oact;
     act.sa_handler = func;
     sigemptyset(&act.sa_mask);
     act.sa_flags = 0;
 
     if (signo == SIGALRM) {
-#ifdef
+#ifdef SA_INTERRUPT
+        act.sa_flags |= SA_INTERRUPT; /* SunOS 4.x */
+#endif
+    } else {
+#ifdef SA_RESTART
+        act.sa_flags |= SA_RESTART; /* SVR4, 4.4BSD */
+#endif
     }
+    if (sigaction (signo, &act, &oact) < 0)
+        return (SIG_ERR);
+    return (oact.sa_handler);
+}
+
+void sig_chld(int signo) {
+    pid_t pid;
+    int stat;
+    while ( (pid = waitpid(-1, &stat, WNOHANG)) > 0)
+        printf("child %d terminated\n", pid);
+    return;
 }
 
 // =================== SIGNAL =================== //
@@ -218,13 +236,19 @@ int main (int argc, char **argv) {
     // Comeca a escuta por novas conexões
     Listen(listenfd, backlog);
 
-    // Abertura do arquivo de logs
-    // FILE *file = OpenFile("server_operation.log");
+    Signal(SIGCHLD, sig_chld);
 
     for ( ; ; ) {
         struct sockaddr_in peeraddr;
 
         connfd = Accept(listenfd);
+
+        if (connfd < 0) {
+             if (errno == EINTR)
+                continue; 
+             else
+                perror("accept error");
+            }
 
         // Quando uma nova conexao é aceita, o servidor cria um novo processo 
         // que é responsavel por trocar mensagens com o cliente 
@@ -237,7 +261,7 @@ int main (int argc, char **argv) {
             GetPeerName(connfd, (struct sockaddr*)&peeraddr, sizeof(peeraddr));
             PrintSockName("Conexão Recebida", peeraddr, AF_INET, INET_ADDRSTRLEN);
 
-            Echo(connfd);
+            sleep(5);
 
             // Fecha-se a conexão com o cliente
             Close(connfd);

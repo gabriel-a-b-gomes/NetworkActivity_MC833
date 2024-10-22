@@ -90,6 +90,23 @@ void Close(int sockfd) {
     close(sockfd);
 }
 
+int CheckConnection(int sockfd) {
+    char buffer[1];
+    int result = recv(sockfd, buffer, sizeof(buffer), MSG_PEEK | MSG_DONTWAIT);
+
+    if (result == 0) {
+        // A conexão foi fechada
+        printf("Conexão fechada pelo servidor.\n");
+        return 0;
+    } else if (result < 0) {
+        // Houve um erro
+        perror("Erro na verificação da conexão");
+        return -1;
+    }
+
+    // Conexão ainda ativa
+    return 1;
+}
 
 int main(int argc, char **argv) {
     int    sockfd;
@@ -108,18 +125,9 @@ int main(int argc, char **argv) {
 
     sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
-    // Conecta-se com o socket servidor a partir dos parâmetros de entrada
     Connect(sockfd, argv[1], atoi(argv[2]), AF_INET);
 
-    // Obtem as informações do socket local e imprime o IP e Porta
-    GetSockName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket Local", servaddr, AF_INET, INET_ADDRSTRLEN);
-
-    // Obtem as informações do socket servidor e imprime seu IP e Porta
-    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket Servidor", servaddr, AF_INET, INET_ADDRSTRLEN);
-
-    SendNMessages(stdin, sockfd);
+    sleep(3);
 
     Close(sockfd);
 
