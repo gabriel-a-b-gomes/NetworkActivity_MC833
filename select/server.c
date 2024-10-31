@@ -208,6 +208,25 @@ void Close(int sockfd) {
     close(sockfd);
 }
 
+void gerar_monitoramento(int connfd, const char *ip, int port) {
+    char   buffer[MAXDATASIZE];
+
+    time_t t = time(NULL);
+    struct tm *tm_info = localtime(&t);
+    char horario[26];
+    strftime(horario, 26, "%c", tm_info);
+
+    int cpu = rand() % 101;
+    int memoria = rand() % 101;
+    const char *status = (rand() % 2 == 0) ? "Ativo" : "Inativo";
+
+    snprintf(buffer, MAXDATASIZE,
+             "-------------------\nMonitoramento do servidor:\nIP: %s\nPorta: %d\nHorário: %s\nCPU: %d%%\nMemória: %d%%\nStatus: %s\n-------------------\n",
+             ip, port, horario, cpu, memoria, status);
+
+    write(connfd, buffer, MAXDATASIZE);
+}
+
 // =================== SOCKET =================== //
 
 // ==================== FORK ==================== //
@@ -256,6 +275,10 @@ int main (int argc, char **argv) {
     GetSockName(listenfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
     PrintSockName("Socket em execução", servaddr, AF_INET, INET_ADDRSTRLEN);
 
+    char servaddr_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &(servaddr.sin_addr), servaddr_ip, INET_ADDRSTRLEN);
+    int servport = ntohs(servaddr.sin_port);
+
     // Comeca a escuta por novas conexões
     Listen(listenfd, LISTENQ);
 
@@ -294,6 +317,8 @@ int main (int argc, char **argv) {
             }
 
             FD_SET(connfd, &allset);
+
+            gerar_monitoramento(connfd, servaddr_ip, servport);
 
             if (connfd > maxfd)
                 maxfd = connfd;

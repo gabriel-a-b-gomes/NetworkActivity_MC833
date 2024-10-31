@@ -1,0 +1,14 @@
+-------------------
+Monitoramento do servidor:
+IP: 0.0.0.0
+Porta: 9090
+Horário: Wed Oct 30 22:29:1
+-------------------
+Monitoramento do servidor:
+IP: 0.0.0.0
+Porta: 9091
+Horário: Wed Oct 30 22:29:1
+TESTE 123
+TESTE 234
+TESTE 123
+TESTE 234
