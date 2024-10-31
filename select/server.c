@@ -209,7 +209,7 @@ void Close(int sockfd) {
 }
 
 void gerar_monitoramento(int connfd, const char *ip, int port) {
-    char   buffer[MAXDATASIZE];
+    char   buffer[MAXLINE];
 
     time_t t = time(NULL);
     struct tm *tm_info = localtime(&t);
@@ -220,11 +220,11 @@ void gerar_monitoramento(int connfd, const char *ip, int port) {
     int memoria = rand() % 101;
     const char *status = (rand() % 2 == 0) ? "Ativo" : "Inativo";
 
-    snprintf(buffer, MAXDATASIZE,
+    snprintf(buffer, MAXLINE,
              "-------------------\nMonitoramento do servidor:\nIP: %s\nPorta: %d\nHorário: %s\nCPU: %d%%\nMemória: %d%%\nStatus: %s\n-------------------\n",
              ip, port, horario, cpu, memoria, status);
 
-    write(connfd, buffer, MAXDATASIZE);
+    write(connfd, buffer, MAXLINE);
 }
 
 // =================== SOCKET =================== //

@@ -2,13 +2,25 @@
 Monitoramento do servidor:
 IP: 0.0.0.0
 Porta: 9090
-Horário: Wed Oct 30 22:29:1
+Horário: Wed Oct 30 22:31:42 2024
+CPU: 32%
+Memória: 32%
+Status: Inativo
+-------------------
+
 -------------------
 Monitoramento do servidor:
 IP: 0.0.0.0
 Porta: 9091
-Horário: Wed Oct 30 22:29:1
+Horário: Wed Oct 30 22:31:42 2024
+CPU: 32%
+Memória: 32%
+Status: Inativo
+-------------------
+
+
+
+TESTE 123
 TESTE 123
 TESTE 234
-TESTE 123
 TESTE 234
