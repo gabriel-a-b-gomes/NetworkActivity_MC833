@@ -212,16 +212,19 @@ void gerar_monitoramento(int connfd, const char *ip, int port) {
     char   buffer[MAXLINE];
 
     time_t t = time(NULL);
+
+    srand(t);
+
     struct tm *tm_info = localtime(&t);
     char horario[26];
     strftime(horario, 26, "%c", tm_info);
 
     int cpu = rand() % 101;
     int memoria = rand() % 101;
-    const char *status = (rand() % 2 == 0) ? "Ativo" : "Inativo";
+    const char *status = (cpu % 2 == 0) ? "Ativo" : "Inativo";
 
     snprintf(buffer, MAXLINE,
-             "-------------------\nMonitoramento do servidor:\nIP: %s\nPorta: %d\nHorário: %s\nCPU: %d%%\nMemória: %d%%\nStatus: %s\n-------------------\n",
+             "-------------------\nMonitoramento do servidor:\nIP: %s\nPorta: %d\nHorário: %s\nCPU: %d%%\nMemória: %d%%\nStatus: %s\n-------------------",
              ip, port, horario, cpu, memoria, status);
 
     write(connfd, buffer, MAXLINE);
