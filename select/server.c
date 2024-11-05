@@ -208,7 +208,7 @@ void Close(int sockfd) {
     close(sockfd);
 }
 
-void gerar_monitoramento(int connfd, const char *ip, int port) {
+void Monitoring(int connfd, const char *ip, int port) {
     char   buffer[MAXLINE];
 
     time_t t = time(NULL);
@@ -321,7 +321,7 @@ int main (int argc, char **argv) {
 
             FD_SET(connfd, &allset);
 
-            gerar_monitoramento(connfd, servaddr_ip, servport);
+            Monitoring(connfd, servaddr_ip, servport);
 
             if (connfd > maxfd)
                 maxfd = connfd;
@@ -349,52 +349,6 @@ int main (int argc, char **argv) {
                     break;
             }
         }
-
-        // struct sockaddr_in peeraddr;
-
-
-        // // Quando uma nova conexao é aceita, o servidor cria um novo processo 
-        // // que é responsavel por trocar mensagens com o cliente 
-        // if ((pid = Fork()) == 0) 
-        // {
-        //     Close(listenfd);
-            
-        //     int min_tasks = 1;
-        //     int max_tasks = 5;
-        //     // Sorteia um número de tasks a serem processadas
-        //     int num_tasks = min_tasks + rand() % (max_tasks - min_tasks + 1);
-
-        //     // Obtem-se o IP e Porta do cliente para uso posteriores
-        //     // Esse será usado para identificar o cliente nos logs
-        //     GetPeerName(connfd, (struct sockaddr*)&peeraddr, sizeof(peeraddr));
-        //     char paddrClient[INET_ADDRSTRLEN];
-        //     inet_ntop(AF_INET, &(peeraddr.sin_addr), paddrClient, INET_ADDRSTRLEN);
-
-        //     int portClient = ntohs(peeraddr.sin_port);
-
-        //     PrintSockName("Conexão Recebida", peeraddr, AF_INET, INET_ADDRSTRLEN);
-
-        //     // Envia uma mensagem de boas vindas para o cliente
-        //     WriteWelcomeMessage(connfd);
-
-        //     // Processa n tasks
-        //     int i = 1;
-        //     while (i <= num_tasks) { 
-        //         // Passa o id da task a ser processada
-        //         ProcessTasks(connfd, i, file, paddrClient, portClient);
-        //         i++;
-        //     }
-
-        //     // Ao final do processamento envia-se uma mensagem de encerrar o servidor
-        //     SendCloseMessage(connfd, file, paddrClient, portClient);
-
-        //     // Fecha-se a conexão com o cliente
-        //     Close(connfd);
-
-        //     exit(0);
-        // }
-
-        // Close(connfd);
     }
 
     CloseFile(file);

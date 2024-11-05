@@ -135,8 +135,6 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd1, int sockfd2) {
                 }
             }
 
-            // printf("[%d] %s", n, recvline);
-            // fputs(recvline, stdout);
             WriteFile(exitfp, recvline, n);
         }
 
@@ -150,8 +148,6 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd1, int sockfd2) {
                 }
             }
 
-            // printf("[%d] %s", n, recvline);
-            // fputs(recvline, stdout);
             WriteFile(exitfp, recvline, n);
         }
 
