@@ -258,8 +258,6 @@ int main (int argc, char **argv) {
     socklen_t           clilen;
     struct sockaddr_in  cliaddr, servaddr;
 
-    pid_t   pid;
-
     // Verifica se a porta foi passada como parâmetro
     if (argc != 2) {
         strcpy(error,"uso: ");

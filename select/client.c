@@ -166,13 +166,9 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd1, int sockfd2) {
 }
 
 int main(int argc, char **argv) {
-    int    sockfd1, sockfd2, n;
-    char   recvline[MAXLINE + 1];
-    char   sendline[MAXDATASIZE + 1];
+    int    sockfd1, sockfd2;
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr;
-
-    char prefixo[] = "tarefa";
 
     // Garante que o IP e Porta do socket servidor foram passados
     if (argc != 6) {
@@ -217,11 +213,6 @@ int main(int argc, char **argv) {
     FILE * exitfp = OpenFile(argv[5], "w");
 
     str_cli(entryfp, exitfp, sockfd1, sockfd2);
-
-    if (n < 0) {
-        perror("read error");
-        exit(1);
-    }
 
     CloseFile(entryfp);
     CloseFile(exitfp);
