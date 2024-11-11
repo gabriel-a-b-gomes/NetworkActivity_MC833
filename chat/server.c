@@ -230,8 +230,8 @@ void Monitoring(int connfd, const char *ip, int port) {
     write(connfd, buffer, MAXLINE);
 }
 
-char *GetNickname(int connfd) {
-    char *nickname[MAXLINE];
+char *GetNickname(int connfd, char* nickname) {
+    int n;
 
     while((n = read(connfd, nickname, sizeof(nickname))) > 0) {
         nickname[n] = 0;
@@ -261,16 +261,14 @@ int Fork() {
 // ==================== FORK ==================== //
 
 int main (int argc, char **argv) {
-    int                 i, maxi, maxfd, listenfd, connfd, sockfd;
+    int                 i, maxi, maxfd, listenfd, connfd, sockfd, clifd;
     int                 nready, client[FD_SETSIZE];
-    char                error[MAXLINE + 1], buf[MAXLINE];
+    char                error[MAXLINE + 1], buf[MAXLINE], nickname[MAXLINE];
 
     fd_set              rset, allset;
     ssize_t             n;
     socklen_t           clilen;
     struct sockaddr_in  cliaddr, servaddr;
-
-    pid_t   pid;
 
     // Verifica se a porta foi passada como parâmetro
     if (argc != 2) {
@@ -292,7 +290,6 @@ int main (int argc, char **argv) {
 
     char servaddr_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(servaddr.sin_addr), servaddr_ip, INET_ADDRSTRLEN);
-    int servport = ntohs(servaddr.sin_port);
 
     // Comeca a escuta por novas conexões
     Listen(listenfd, LISTENQ);
@@ -333,7 +330,7 @@ int main (int argc, char **argv) {
 
             FD_SET(connfd, &allset);
 
-            char nickname[] = GetNickname(connfd);
+            GetNickname(connfd, nickname);
 
             printf("[%s] Conectou-se", nickname);
 
@@ -357,7 +354,9 @@ int main (int argc, char **argv) {
                     client[i] = -1;
                 } else {
                     for (int j = 0; j < maxi; j++) {
-                        if (j == i || (clifd = client[j]) < 0)
+                        if (i == j) continue;
+
+                        if ((clifd = client[j]) < 0)
                             continue;
                         
                         write(clifd, buf, n);

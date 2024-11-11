@@ -106,7 +106,7 @@ void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, 
     printf("%s (%s, %d)\n", description, p_addr, ntohs(sockinfos.sin_port));
 }
 
-void str_cli(FILE * fp, FILE * exitfp, int sockfd1, int sockfd2) {
+void str_cli(FILE * fp, FILE * exitfp, int sockfd, int sockfd2) {
     int maxfdp, stdineof;
     fd_set rset;
     char sendline[MAXLINE], recvline[MAXLINE];
@@ -119,14 +119,14 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd1, int sockfd2) {
         if (stdineof == 0) 
             FD_SET(fileno(fp), &rset);
 
-        FD_SET(sockfd1, &rset);
+        FD_SET(sockfd, &rset);
         FD_SET(sockfd2, &rset);
-        maxfdp = max(fileno(fp), (sockfd1 > sockfd2 ? sockfd1 : sockfd2)) + 1;
+        maxfdp = max(fileno(fp), (sockfd > sockfd2 ? sockfd : sockfd2)) + 1;
         
         select(maxfdp, &rset, NULL, NULL, NULL);
 
-        if (FD_ISSET(sockfd1, &rset)) {
-            if ((n = read(sockfd1, recvline, MAXLINE)) == 0) {
+        if (FD_ISSET(sockfd, &rset)) {
+            if ((n = read(sockfd, recvline, MAXLINE)) == 0) {
                 if (stdineof == 1)
                     return;
                 else {
@@ -154,83 +154,82 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd1, int sockfd2) {
         if (FD_ISSET(fileno(fp), &rset)) {
             if (fgets(sendline, MAXLINE, fp) == NULL) {
                 stdineof = 1;
-                shutdown(sockfd1, SHUT_WR);
+                shutdown(sockfd, SHUT_WR);
                 shutdown(sockfd2, SHUT_WR);
                 continue;
             }
 
-            write(sockfd1, sendline, strlen(sendline));
+            write(sockfd, sendline, strlen(sendline));
             write(sockfd2, sendline, strlen(sendline));
         }
     }
 }
 
 int main(int argc, char **argv) {
-    int    sockfd1, sockfd2, n;
+    int    sockfd;
     char   recvline[MAXLINE + 1];
-    char   sendline[MAXDATASIZE + 1];
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr;
 
-    char prefixo[] = "tarefa";
-
     // Garante que o IP e Porta do socket servidor foram passados
-    if (argc != 6) {
+    if (argc != 3) {
         strcpy(error,"uso: ");
         strcat(error,argv[0]);
         strcat(error," <IPaddress>");
-        strcat(error," <Port1>");
-        strcat(error," <Port2>");
-        strcat(error," <entrada.txt>");
-        strcat(error," <saida.txt>");
+        strcat(error," <Port>");
         perror(error);
         exit(1);
     }
 
-    sockfd1 = Socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(sockfd1, argv[1], atoi(argv[2]), AF_INET);
+    Connect(sockfd, argv[1], atoi(argv[2]), AF_INET);
 
     // Obtem as informações do socket local e imprime o IP e Porta
-    GetSockName(sockfd1, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket Local 1", servaddr, AF_INET, INET_ADDRSTRLEN);
+    GetSockName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    PrintSockName("Bem vindo ao chat!", servaddr, AF_INET, INET_ADDRSTRLEN);
 
     // Obtem as informações do socket servidor e imprime seu IP e Porta
-    GetPeerName(sockfd1, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket Servidor 1", servaddr, AF_INET, INET_ADDRSTRLEN);
+    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    PrintSockName("Endereço:", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    sockfd2 = Socket(AF_INET, SOCK_STREAM, 0);
+    // sockfd2 = Socket(AF_INET, SOCK_STREAM, 0);
 
-    // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(sockfd2, argv[1], atoi(argv[3]), AF_INET);
+    // // Conecta-se com o socket servidor a partir dos parâmetros de entrada
+    // Connect(sockfd2, argv[1], atoi(argv[3]), AF_INET);
 
-    // Obtem as informações do socket local e imprime o IP e Porta
-    GetSockName(sockfd2, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket Local 2", servaddr, AF_INET, INET_ADDRSTRLEN);
+    // // Obtem as informações do socket local e imprime o IP e Porta
+    // GetSockName(sockfd2, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    // PrintSockName("Socket Local 2", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    // Obtem as informações do socket servidor e imprime seu IP e Porta
-    GetPeerName(sockfd2, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket Servidor 2", servaddr, AF_INET, INET_ADDRSTRLEN);
+    // // Obtem as informações do socket servidor e imprime seu IP e Porta
+    // GetPeerName(sockfd2, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    // PrintSockName("Socket Servidor 2", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    FILE * entryfp = OpenFile(argv[4], "r");
-    FILE * exitfp = OpenFile(argv[5], "w");
+    // FILE * entryfp = OpenFile(argv[4], "r");
+    // FILE * exitfp = OpenFile(argv[5], "w");
 
-    str_cli(entryfp, exitfp, sockfd1, sockfd2);
+    // str_cli(entryfp, exitfp, sockfd, sockfd2);
 
-    if (n < 0) {
-        perror("read error");
-        exit(1);
-    }
+    // if (n < 0) {
+    //     perror("read error");
+    //     exit(1);
+    // }
 
-    CloseFile(entryfp);
-    CloseFile(exitfp);
+    // CloseFile(entryfp);
+    // CloseFile(exitfp);
 
-    shutdown(sockfd1, SHUT_WR);
-    shutdown(sockfd2, SHUT_WR);
+    printf("Insira seu nome: ");
+    fgets(recvline, MAXLINE, stdin);
 
-    close(sockfd1);
-    close(sockfd2);
+    write(sockfd, recvline, strlen(recvline));
+
+    shutdown(sockfd, SHUT_WR);
+    // shutdown(sockfd2, SHUT_WR);
+
+    close(sockfd);
+    // close(sockfd2);
 
     exit(0);
 }
