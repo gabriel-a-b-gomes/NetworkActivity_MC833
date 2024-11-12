@@ -18,6 +18,82 @@
 #define FD_SETSIZE 256
 #endif
 
+// ================ CLIENTS_UDP ================= //
+
+typedef struct udp_list *p_udp_list;
+typedef struct udp_client *p_udp_client;
+
+struct udp_list
+{
+    p_udp_client list;
+};
+
+struct udp_client {
+    struct sockaddr * cliaddr;
+    char *nickname;
+    p_udp_client prev;
+    p_udp_client next;
+};
+
+p_udp_client create_udp_client(struct sockaddr * cliaddr, char* nickname) {
+    p_udp_client new_client = malloc(sizeof(struct udp_client));
+
+    new_client->cliaddr = cliaddr;
+    strcpy(new_client->nickname, nickname);
+    new_client->prev = NULL;
+    new_client->next = NULL;
+
+    return new_client;
+}
+
+void add_udp_client(p_udp_list udp_list, struct sockaddr * cliaddr, char* nickname) {
+    p_udp_client curr = udp_list->list;
+
+    if (curr == NULL)
+        udp_list->list = create_udp_client(cliaddr, nickname);
+    else{
+        while (curr->next == NULL) {
+            curr = curr->next;
+        }
+
+        p_udp_client new_client = create_udp_client(cliaddr, nickname);
+        curr->next = new_client;
+        new_client->prev = curr;
+    }
+}
+
+int find_udp_client(p_udp_list udp_list, char* nickname) {
+    p_udp_client curr = udp_list->list;
+
+    if (prev != NULL)
+        while (curr == NULL) {
+            if (strcmp(curr->nickname, nickname) == 0)
+                return curr;
+
+            curr = curr->next;
+        }
+
+    return NULL;
+}
+
+void remove_udp_client(p_udp_list udp_list, char* nickname) {
+    p_udp_client curr = udp_list->list;
+
+    if (prev != NULL)
+        while (curr == NULL) {
+            if (strcmp(curr->nickname, nickname) == 0) {
+                curr->prev->next = curr->next;
+                curr->next->prev = curr->prev;
+
+                free(curr);
+            }
+
+            curr = curr->next;
+        }
+}
+
+
+
 // ==================== FILE ==================== //
 
 FILE * OpenFile(char * fileName) {
@@ -206,13 +282,14 @@ int Fork() {
 // ==================== FORK ==================== //
 
 int main (int argc, char **argv) {
-    int                 i, maxi, maxfd, listenfd, connfd, sockfd, clifd;
+    int                 i, maxi, maxfd, listenfd, udpfd, connfd, sockfd, clifd;
     int                 nready, client[FD_SETSIZE];
-    char                error[MAXLINE + 1], buf[MAXLINE];
+    char                error[MAXLINE + 1], buf[MAXLINE], nickname[MAXLINE], mesg[MAXLINE];
 
     fd_set              rset, allset;
     ssize_t             n;
     socklen_t           clilen;
+    socklen_t           len;
     struct sockaddr_in  cliaddr, servaddr;
 
     // Verifica se a porta foi passada como parâmetro
@@ -225,9 +302,11 @@ int main (int argc, char **argv) {
     }
 
     listenfd = Socket(AF_INET, SOCK_STREAM, 0);
+    udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Passa como parâmetro a porta escolhida por onde o socket irá trocar mensagem
     Bind(listenfd, AF_INET, atoi(argv[1]));
+    Bind(udpfd, AF_INET, 4444);
 
     // Mostra o IP e Porta do servidor socket
     GetSockName(listenfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
@@ -242,7 +321,7 @@ int main (int argc, char **argv) {
     // Abertura do arquivo de logs
     FILE *file = OpenFile("server_operation.log");
 
-    maxfd = listenfd;
+    maxfd = listenfd > udpfd ? listenfd : udpfd;
     maxi = -1;
 
     for (i = 0; i < FD_SETSIZE; i++) {
@@ -251,6 +330,7 @@ int main (int argc, char **argv) {
 
     FD_ZERO(&allset);
     FD_SET(listenfd, &allset);
+    FD_SET(udpfd, &allset);
 
     for ( ; ; ) {
         rset = allset;
@@ -269,15 +349,12 @@ int main (int argc, char **argv) {
             }
 
             if (i == FD_SETSIZE) {
-                perror("Clientes demais");
-                exit(1);
+                continue;
             }
 
             FD_SET(connfd, &allset);
 
-            // GetNickname(connfd, nickname);
-
-            // printf("[%s] Conectou-se", nickname);
+            GetNickname(connfd, nickname);
 
             if (connfd > maxfd)
                 maxfd = connfd;
@@ -286,6 +363,24 @@ int main (int argc, char **argv) {
 
             if (--nready <= 0)
                 continue;
+        }
+
+        if (FD_ISSET(udpfd, &rset)) {
+            len = sizeof(cliaddr);
+            n = recvfrom(udpfd, mesg, MAXLINE, 0, (struct sockaddr *) &cliaddr, &len);
+
+            PrintSockName("Cliente UDP", cliaddr, AF_INET, len);
+
+            // Atraves do endereço da mensagem, se o cliente já está na lista, então deve enviar um aviso de exclusão.
+            // Se ele é novo, deve enviar um aviso de entrada - instanciar na lista - enviar aviso de adição
+
+            mesg[n] = 0;
+
+            printf("Mensagem recebida: %s", mesg);
+
+            sendto(udpfd, mesg, n, 0, (struct sockaddr *) &cliaddr, len);
+
+            // enviar para o cliente atual, uma lista com os nomes 
         }
 
         for (i = 0; i <= maxi; i++) {

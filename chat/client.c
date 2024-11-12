@@ -106,7 +106,7 @@ void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, 
     printf("%s (%s, %d)\n", description, p_addr, ntohs(sockinfos.sin_port));
 }
 
-void make_chat(FILE * fp, int sockfd) {
+void make_chat(FILE * fp, int sockfd, int udpfd) {
     int maxfdp, stdineof;
     fd_set rset;
     char sendline[MAXLINE], recvline[MAXLINE];
@@ -120,7 +120,8 @@ void make_chat(FILE * fp, int sockfd) {
             FD_SET(fileno(fp), &rset);
 
         FD_SET(sockfd, &rset);
-        maxfdp = max(fileno(fp), sockfd) + 1;
+        FD_SET(udpfd, &rset);
+        maxfdp = max(fileno(fp), sockfd > udpfd ? sockfd : udpfd) + 1;
         
         select(maxfdp, &rset, NULL, NULL, NULL);
 
@@ -137,6 +138,19 @@ void make_chat(FILE * fp, int sockfd) {
             WriteFile(stdout, recvline, n);
         }
 
+        if (FD_ISSET(udpfd, &rset)) {
+            if ((n = recvfrom(udpfd, recvline, MAXLINE, 0, NULL, NULL)) == 0) {
+                if (stdineof == 1)
+                    return;
+                else {
+                    perror("str_cli: servidor finalizou antes do esperado");
+                    exit(1);
+                }
+            }
+
+            printf("Mensagem UDP: %s", recvline);
+        }
+
         if (FD_ISSET(fileno(fp), &rset)) {
             if (fgets(sendline, MAXLINE, fp) == NULL) {
                 stdineof = 1;
@@ -150,10 +164,10 @@ void make_chat(FILE * fp, int sockfd) {
 }
 
 int main(int argc, char **argv) {
-    int    sockfd;
-    // char   recvline[MAXLINE + 1];
+    int    sockfd, udpfd;
+    char   recvline[MAXLINE + 1];
     char   error[MAXLINE + 1];
-    struct sockaddr_in servaddr;
+    struct sockaddr_in servaddr, udpaddr;
 
     // Garante que o IP e Porta do socket servidor foram passados
     if (argc != 3) {
@@ -164,6 +178,14 @@ int main(int argc, char **argv) {
         perror(error);
         exit(1);
     }
+
+    printf("Insira seu nome: ");
+    fgets(recvline, MAXLINE, stdin);
+
+    // size_t len = strlen(recvline);
+    // if (len > 0 && (recvline[len - 1] == '\n' || recvline[len - 1] == '\r')) {
+    //     recvline[len - 1] = '\0';
+    // }
 
     sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
@@ -178,18 +200,18 @@ int main(int argc, char **argv) {
     GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
     PrintSockName("Endereço:", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    // sockfd2 = Socket(AF_INET, SOCK_STREAM, 0);
+    udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
-    // // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    // Connect(sockfd2, argv[1], atoi(argv[3]), AF_INET);
+    // Conecta-se com o socket servidor a partir dos parâmetros de entrada
+    Connect(udpfd, argv[1], 4444, AF_INET);
 
-    // // Obtem as informações do socket local e imprime o IP e Porta
-    // GetSockName(sockfd2, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    // PrintSockName("Socket Local 2", servaddr, AF_INET, INET_ADDRSTRLEN);
+    // Obtem as informações do socket local e imprime o IP e Porta
+    GetSockName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
+    PrintSockName("Server UDP", udpaddr, AF_INET, INET_ADDRSTRLEN);
 
-    // // Obtem as informações do socket servidor e imprime seu IP e Porta
-    // GetPeerName(sockfd2, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    // PrintSockName("Socket Servidor 2", servaddr, AF_INET, INET_ADDRSTRLEN);
+    // Obtem as informações do socket servidor e imprime seu IP e Porta
+    GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
+    PrintSockName("Server UDP", udpaddr, AF_INET, INET_ADDRSTRLEN);
 
     // FILE * entryfp = OpenFile(argv[4], "r");
     // FILE * exitfp = OpenFile(argv[5], "w");
@@ -204,12 +226,10 @@ int main(int argc, char **argv) {
     // CloseFile(entryfp);
     // CloseFile(exitfp);
 
-    // printf("Insira seu nome: ");
-    // fgets(recvline, MAXLINE, stdin);
+    write(sockfd, recvline, strlen(recvline));
+    sendto(udpfd, recvline, strlen(recvline), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
 
-    // write(sockfd, recvline, strlen(recvline));
-
-    make_chat(stdin, sockfd);
+    make_chat(stdin, sockfd, udpfd);
 
     shutdown(sockfd, SHUT_WR);
     // shutdown(sockfd2, SHUT_WR);
