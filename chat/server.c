@@ -138,70 +138,15 @@ void WriteWelcomeMessage(int connfd) {
     sleep(1);
 }
 
+void WriteMessage(int sockfd, char* message) {
+    char   buf[MAXLINE];
+    time_t ticks;
 
-char * GetTask(int taskid) {
-    // Seleção de uma task a partir da task id
-    switch (taskid)
-    {
-        case 1: 
-            return "TAREFA:LIMPEZA";
-        case 2: 
-            return "TAREFA:FORMATACAO";
-        case 3: 
-            return "TAREFA:RESTAURACAO";
-        case 4: 
-            return "TAREFA:PEDIDO";
-        case 5: 
-            return "TAREFA:REPORTAR";
-        default:
-            return "TAREFA:NOP";
-    }
+    ticks = time(NULL);
+    snprintf(buf, sizeof(buf), "[%.24s] %s", ctime(&ticks), message);
 
-    return "TAREFA:NOP";
-}
-
-
-void ProcessTasks(int connfd, int taskid, FILE *file, char* addr, int port) {
-    int n;
-    char buf[MAXDATASIZE];
-    char recvline[MAXLINE + 1];
-    char template[MAXLINE + 1];
-
-    // Obtem a task que será processada
-    char* task = GetTask(taskid);
-
-    // Template de conclusao da task - nome_task CONCLUIDA
-    snprintf(template, MAXLINE, "%s CONCLUÍDA", task);
-
-    snprintf(buf, sizeof(buf), "%s", task);
-
-    // Envia ao cliente a task para processamento
-    write(connfd, buf, strlen(buf));
-
-    // Escreve no arquivo de logs que foi enviada uma nova tarefa
-    WriteFile(file, "ENVIADO", buf, addr, port);
-
-    // Aguarda pela leitura de uma nova mensagem
-    while ( (n = read(connfd, recvline, sizeof(recvline))) > 0) {
-        recvline[n] = 0;
-
-        // Escreve nos logs a mensagem recebida do cliente
-        WriteFile(file, "RECEBIDO", recvline, addr, port);
-
-        // Verifica se a mensagem é igual ao template definido
-        if (strcmp(recvline, template) == 0)
-            break;
-    }
-}
-
-void SendCloseMessage(int connfd, FILE *file, char* addr, int port) {
-    char   buf[MAXDATASIZE];
-
-    snprintf(buf, sizeof(buf), "ENCERRAR");
-    WriteFile(file, "ENVIADO", buf, addr, port);
-
-    // Envia uma mensagem ao cliente para encerrar
-    write(connfd, buf, strlen(buf));
+    // Escreve a mensagem de boas vindas para o cliente
+    write(sockfd, buf, strlen(buf));
 }
 
 void Close(int sockfd) {
@@ -263,7 +208,7 @@ int Fork() {
 int main (int argc, char **argv) {
     int                 i, maxi, maxfd, listenfd, connfd, sockfd, clifd;
     int                 nready, client[FD_SETSIZE];
-    char                error[MAXLINE + 1], buf[MAXLINE], nickname[MAXLINE];
+    char                error[MAXLINE + 1], buf[MAXLINE];
 
     fd_set              rset, allset;
     ssize_t             n;
@@ -330,9 +275,9 @@ int main (int argc, char **argv) {
 
             FD_SET(connfd, &allset);
 
-            GetNickname(connfd, nickname);
+            // GetNickname(connfd, nickname);
 
-            printf("[%s] Conectou-se", nickname);
+            // printf("[%s] Conectou-se", nickname);
 
             if (connfd > maxfd)
                 maxfd = connfd;
@@ -353,13 +298,13 @@ int main (int argc, char **argv) {
                     FD_CLR(sockfd, &allset);
                     client[i] = -1;
                 } else {
-                    for (int j = 0; j < maxi; j++) {
+                    for (int j = 0; j <= maxi; j++) {
                         if (i == j) continue;
 
                         if ((clifd = client[j]) < 0)
                             continue;
                         
-                        write(clifd, buf, n);
+                        WriteMessage(clifd, buf);
                     }
                     // write(sockfd, buf, n);
                 }

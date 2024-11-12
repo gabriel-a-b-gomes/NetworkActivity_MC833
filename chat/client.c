@@ -106,7 +106,7 @@ void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, 
     printf("%s (%s, %d)\n", description, p_addr, ntohs(sockinfos.sin_port));
 }
 
-void str_cli(FILE * fp, FILE * exitfp, int sockfd, int sockfd2) {
+void make_chat(FILE * fp, int sockfd) {
     int maxfdp, stdineof;
     fd_set rset;
     char sendline[MAXLINE], recvline[MAXLINE];
@@ -120,8 +120,7 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd, int sockfd2) {
             FD_SET(fileno(fp), &rset);
 
         FD_SET(sockfd, &rset);
-        FD_SET(sockfd2, &rset);
-        maxfdp = max(fileno(fp), (sockfd > sockfd2 ? sockfd : sockfd2)) + 1;
+        maxfdp = max(fileno(fp), sockfd) + 1;
         
         select(maxfdp, &rset, NULL, NULL, NULL);
 
@@ -135,39 +134,24 @@ void str_cli(FILE * fp, FILE * exitfp, int sockfd, int sockfd2) {
                 }
             }
 
-            WriteFile(exitfp, recvline, n);
-        }
-
-        if (FD_ISSET(sockfd2, &rset)) {
-            if ((n = read(sockfd2, recvline, MAXLINE)) == 0) {
-                if (stdineof == 1)
-                    return;
-                else {
-                    perror("str_cli: servidor finalizou antes do esperado");
-                    exit(1);
-                }
-            }
-
-            WriteFile(exitfp, recvline, n);
+            WriteFile(stdout, recvline, n);
         }
 
         if (FD_ISSET(fileno(fp), &rset)) {
             if (fgets(sendline, MAXLINE, fp) == NULL) {
                 stdineof = 1;
                 shutdown(sockfd, SHUT_WR);
-                shutdown(sockfd2, SHUT_WR);
                 continue;
             }
 
             write(sockfd, sendline, strlen(sendline));
-            write(sockfd2, sendline, strlen(sendline));
         }
     }
 }
 
 int main(int argc, char **argv) {
     int    sockfd;
-    char   recvline[MAXLINE + 1];
+    // char   recvline[MAXLINE + 1];
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr;
 
@@ -220,10 +204,12 @@ int main(int argc, char **argv) {
     // CloseFile(entryfp);
     // CloseFile(exitfp);
 
-    printf("Insira seu nome: ");
-    fgets(recvline, MAXLINE, stdin);
+    // printf("Insira seu nome: ");
+    // fgets(recvline, MAXLINE, stdin);
 
-    write(sockfd, recvline, strlen(recvline));
+    // write(sockfd, recvline, strlen(recvline));
+
+    make_chat(stdin, sockfd);
 
     shutdown(sockfd, SHUT_WR);
     // shutdown(sockfd2, SHUT_WR);
