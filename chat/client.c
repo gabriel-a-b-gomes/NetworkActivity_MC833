@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <arpa/inet.h>
@@ -13,13 +14,191 @@
 
 #define MAXDATASIZE 2100
 #define MAXLINE 2048
-    
+#define MAXNICK 1024
+
 // Var para receber o nickname
 char   recvline[MAXLINE + 1];
 char   addr[MAXLINE + 1];
 
 int max(int a, int b) {
     return a >= b ? a : b;
+}
+
+
+// Function to trim leading and trailing '|' characters from a string.
+void trim_pipes(char *str) {
+    if (str == NULL || strlen(str) == 0) return;
+
+    // Trim leading '|'.
+    while (*str == '|') str++;
+
+    // Find the end of the string.
+    char *end = str + strlen(str) - 1;
+
+    // Trim trailing '|'.
+    while (end > str && *end == '|') {
+        *end = '\0';
+        end--;
+    }
+}
+
+// ================ CLIENTS_UDP ================= //
+
+typedef struct people_list *p_people_list;
+typedef struct people *p_people;
+
+struct people_list
+{
+    p_people list;
+};
+
+struct people {
+    char nickname[MAXNICK];
+    p_people prev;
+    p_people next;
+};
+
+p_people_list create_people_list() {
+    p_people_list pop_list = malloc(sizeof(struct people_list));
+
+    pop_list->list = NULL;
+
+    return pop_list;
+}
+
+p_people create_people(char* nickname) {
+    p_people new_people = malloc(sizeof(struct people));
+
+    strcpy(new_people->nickname, nickname);
+    new_people->prev = NULL;
+    new_people->next = NULL;
+
+    return new_people;
+}
+
+void add_people(p_people_list pop_list, char* nickname) {
+    if (pop_list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return;
+    }
+
+    p_people curr = pop_list->list;
+
+    if (curr == NULL)
+        pop_list->list = create_people(nickname);
+    else{
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+
+        p_people new_people = create_people(nickname);
+        curr->next = new_people;
+        new_people->prev = curr;
+    }
+
+    
+}
+
+p_people find_people(p_people_list pop_list, char* nickname) {
+    if (pop_list == NULL || pop_list->list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return 0;
+    }
+
+    p_people curr = pop_list->list;
+
+    while (curr != NULL) {
+        if (strcmp(curr->nickname, nickname) == 0)
+            return curr;
+
+        curr = curr->next;
+    }
+
+    return NULL;
+}
+
+int remove_people(p_people_list pop_list, char* nickname) {
+    if (pop_list == NULL || pop_list->list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return 0;
+    }
+
+    p_people curr = pop_list->list;
+
+    while (curr != NULL) {
+        if (strcmp(curr->nickname, nickname) == 0) {
+            if (curr->prev != NULL)
+                curr->prev->next = curr->next;
+            else
+                pop_list->list = curr->next;
+            
+            if (curr->next != NULL)
+                curr->next->prev = curr->prev;
+
+            free(curr);
+            curr = NULL;
+
+            return 1;
+        }
+
+        curr = curr->next;
+    }
+
+    return 0;
+}
+
+void handle_udp_message(p_people_list pop_list, char *message) {
+    // Check if the message is valid.
+    if (message == NULL || strlen(message) < 2) {
+        fprintf(stderr, "Invalid message received\n");
+        return;
+    }
+
+    char *token;
+    // Get the command character.
+    char command = message[0];
+    char *payload = message + 1; // Skip the command character.
+
+    trim_pipes(payload);
+
+    switch (command) {
+        case 'A':
+            token = strtok(payload, "|");
+
+            // Add a nickname to the list.
+            add_people(pop_list, token); // Example IP and port used.
+            printf("Um usuário entrou no chat: %s", token);
+            break;
+        
+        case 'R':
+            token = strtok(payload, "|");
+
+            // Remove a nickname from the list.
+            if (remove_people(pop_list, token)) {
+                printf("Um usuário saiu do chat: %s", token);
+            } 
+            break;
+
+        case 'L': {
+            // Replace the list with nicknames from the payload.
+            // Tokenize the payload to separate nicknames.
+            token = strtok(payload, "|");
+            while (token != NULL) {
+                trim_pipes(token);
+                add_people(pop_list, token); // Example IP and port used.
+
+                if (strcmp(token, recvline) != 0) {
+                    printf("Usuário no chat: %s", token);
+                }
+
+                token = strtok(NULL, "|");
+            }
+            break;
+        }    
+
+        default:
+            break;
+    }
 }
 
 // ==================== FILE ==================== //
@@ -111,7 +290,7 @@ void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, 
     printf("%s (%s, %d)\n", description, p_addr, ntohs(sockinfos.sin_port));
 }
 
-void make_chat(FILE * fp, int sockfd, int udpfd) {
+void make_chat(FILE * fp, int sockfd, int udpfd, p_people_list pop_list) {
     int maxfdp, stdineof;
     fd_set rset;
     char sendline[MAXLINE], recvline[MAXLINE];
@@ -158,7 +337,7 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
 
             recvline[n] = 0;
 
-            printf("Mensagem UDP: %s", recvline);
+            handle_udp_message(pop_list, recvline);
         }
 
         if (FD_ISSET(fileno(fp), &rset)) {
@@ -185,7 +364,6 @@ void handle_exit_signal(int signum) {
     GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
 
     if (strlen(recvline) > 0) {
-        printf("Teste %s\n", recvline);
         sendto(udpfd, recvline, strlen(recvline), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
     }
     // Close the UDP socket and perform any other cleanup
@@ -199,6 +377,8 @@ int main(int argc, char **argv) {
     int    sockfd, udpfd;
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr, udpaddr;
+
+    p_people_list pop_list = create_people_list();
 
     // Garante que o IP e Porta do socket servidor foram passados
     if (argc != 3) {
@@ -261,7 +441,7 @@ int main(int argc, char **argv) {
     write(sockfd, recvline, strlen(recvline));
     sendto(udpfd, recvline, strlen(recvline), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
 
-    make_chat(stdin, sockfd, udpfd);
+    make_chat(stdin, sockfd, udpfd, pop_list);
 
     shutdown(sockfd, SHUT_WR);
     shutdown(udpfd, SHUT_WR);
