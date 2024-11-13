@@ -58,6 +58,11 @@ p_udp_client create_udp_client(char *ip, int port, char* nickname) {
 }
 
 void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
+    if (udplst == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return;
+    }
+
     p_udp_client curr = udplst->list;
 
     if (curr == NULL)
@@ -74,6 +79,11 @@ void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
 }
 
 p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
+    if (udplst == NULL || udplst->list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return 0;
+    }
+
     p_udp_client curr = udplst->list;
 
     while (curr != NULL) {
@@ -87,6 +97,11 @@ p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
 }
 
 int remove_udp_client(p_udp_list udplst, char* nickname) {
+    if (udplst == NULL || udplst->list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return 0;
+    }
+
     p_udp_client curr = udplst->list;
 
     while (curr != NULL) {
@@ -100,6 +115,7 @@ int remove_udp_client(p_udp_list udplst, char* nickname) {
                 curr->next->prev = curr->prev;
 
             free(curr);
+            curr = NULL;
 
             return 1;
         }
@@ -444,10 +460,9 @@ int main (int argc, char **argv) {
 
             mesg[n] = 0;
 
-            // printf("Mensagem recebida: %s", mesg);
-            p_udp_client curr = udplst->list;
-
             if (!remove_udp_client(udplst, mesg)) {
+                p_udp_client curr = udplst->list;
+
                 while (curr != NULL) {
                     snprintf(buf, sizeof(buf), "A|%s", mesg);
 
@@ -471,6 +486,8 @@ int main (int argc, char **argv) {
 
                 free(nicks);
             } else {
+                p_udp_client curr = udplst->list;
+
                 while (curr != NULL) {
                     snprintf(buf, sizeof(buf), "R|%s", mesg);
 
