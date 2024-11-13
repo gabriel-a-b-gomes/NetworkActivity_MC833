@@ -135,6 +135,8 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
                 }
             }
 
+            recvline[n] = 0;
+
             WriteFile(stdout, recvline, n);
         }
 
@@ -147,6 +149,8 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
                     exit(1);
                 }
             }
+
+            recvline[n] = 0;
 
             printf("Mensagem UDP: %s", recvline);
         }
