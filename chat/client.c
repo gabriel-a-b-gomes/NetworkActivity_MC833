@@ -9,9 +9,14 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #define MAXDATASIZE 2100
 #define MAXLINE 2048
+    
+// Var para receber o nickname
+char   recvline[MAXLINE + 1];
+char   addr[MAXLINE + 1];
 
 int max(int a, int b) {
     return a >= b ? a : b;
@@ -126,6 +131,7 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
         select(maxfdp, &rset, NULL, NULL, NULL);
 
         if (FD_ISSET(sockfd, &rset)) {
+            recvline[0] = 0;
             if ((n = read(sockfd, recvline, MAXLINE)) == 0) {
                 if (stdineof == 1)
                     return;
@@ -134,6 +140,8 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
                     exit(1);
                 }
             }
+
+            recvline[n] = 0;
 
             WriteFile(stdout, recvline, n);
         }
@@ -147,6 +155,8 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
                     exit(1);
                 }
             }
+
+            recvline[n] = 0;
 
             printf("Mensagem UDP: %s", recvline);
         }
@@ -163,9 +173,30 @@ void make_chat(FILE * fp, int sockfd, int udpfd) {
     }
 }
 
+void handle_exit_signal(int signum) {
+    int udpfd;
+    struct sockaddr_in udpaddr;
+
+    udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
+
+    // Conecta-se com o socket servidor a partir dos parâmetros de entrada
+    Connect(udpfd, addr, 4444, AF_INET);
+
+    GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
+
+    if (strlen(recvline) > 0) {
+        printf("Teste %s\n", recvline);
+        sendto(udpfd, recvline, strlen(recvline), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
+    }
+    // Close the UDP socket and perform any other cleanup
+    close(udpfd);
+    exit(0);
+}
+
 int main(int argc, char **argv) {
+    signal(SIGINT, handle_exit_signal);
+
     int    sockfd, udpfd;
-    char   recvline[MAXLINE + 1];
     char   error[MAXLINE + 1];
     struct sockaddr_in servaddr, udpaddr;
 
@@ -189,8 +220,9 @@ int main(int argc, char **argv) {
 
     sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
+    strcpy(addr, argv[1]);
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(sockfd, argv[1], atoi(argv[2]), AF_INET);
+    Connect(sockfd, addr, atoi(argv[2]), AF_INET);
 
     // Obtem as informações do socket local e imprime o IP e Porta
     GetSockName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
@@ -203,7 +235,7 @@ int main(int argc, char **argv) {
     udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(udpfd, argv[1], 4444, AF_INET);
+    Connect(udpfd, addr, 4444, AF_INET);
 
     // Obtem as informações do socket local e imprime o IP e Porta
     GetSockName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
@@ -232,9 +264,11 @@ int main(int argc, char **argv) {
     make_chat(stdin, sockfd, udpfd);
 
     shutdown(sockfd, SHUT_WR);
+    shutdown(udpfd, SHUT_WR);
     // shutdown(sockfd2, SHUT_WR);
 
     close(sockfd);
+    close(udpfd);
     // close(sockfd2);
 
     exit(0);

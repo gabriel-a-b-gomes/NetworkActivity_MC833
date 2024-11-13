@@ -58,6 +58,11 @@ p_udp_client create_udp_client(char *ip, int port, char* nickname) {
 }
 
 void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
+    if (udplst == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return;
+    }
+
     p_udp_client curr = udplst->list;
 
     if (curr == NULL)
@@ -74,6 +79,11 @@ void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
 }
 
 p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
+    if (udplst == NULL || udplst->list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return 0;
+    }
+
     p_udp_client curr = udplst->list;
 
     while (curr != NULL) {
@@ -87,6 +97,11 @@ p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
 }
 
 int remove_udp_client(p_udp_list udplst, char* nickname) {
+    if (udplst == NULL || udplst->list == NULL) {
+        fprintf(stderr, "List is uninitialized or empty\n");
+        return 0;
+    }
+
     p_udp_client curr = udplst->list;
 
     while (curr != NULL) {
@@ -100,6 +115,7 @@ int remove_udp_client(p_udp_list udplst, char* nickname) {
                 curr->next->prev = curr->prev;
 
             free(curr);
+            curr = NULL;
 
             return 1;
         }
@@ -108,6 +124,42 @@ int remove_udp_client(p_udp_list udplst, char* nickname) {
     }
 
     return 0;
+}
+
+
+char* get_all_nicknames(p_udp_list udplst) {
+    if (udplst == NULL || udplst->list == NULL) {
+        return NULL; // Return NULL if the list is empty.
+    }
+
+    // Calculate total size needed for the string.
+    int total_length = 3; // Initial 1 for the null terminator.
+    p_udp_client curr = udplst->list;
+    while (curr != NULL) {
+        total_length += strlen(curr->nickname) + 1; // +1 for the '|' separator.
+        curr = curr->next;
+    }
+
+    // Allocate memory for the resulting string.
+    char* result = malloc(total_length * sizeof(char));
+    if (result == NULL) {
+        perror("Failed to allocate memory");
+        exit(1);
+    }
+
+    strcpy(result, "L|");
+
+    // Concatenate all nicknames with '|'.
+    curr = udplst->list;
+    while (curr != NULL) {
+        strcat(result, curr->nickname);
+        if (curr->next != NULL) {
+            strcat(result, "|");
+        }
+        curr = curr->next;
+    }
+
+    return result;
 }
 
 
@@ -180,7 +232,10 @@ struct sockaddr_in MakeAddr(int family, char *ip, int port) {
 
     bzero(&addr_in, sizeof(addr_in));
     addr_in.sin_family      = family;
-    addr_in.sin_addr.s_addr = htonl(ip);
+    if (inet_pton(family, ip, &addr_in.sin_addr) != 1) {
+        perror("inet_pton failed");
+        return addr_in;
+    }
     addr_in.sin_port        = htons(port); 
 
     return addr_in;  
@@ -405,36 +460,40 @@ int main (int argc, char **argv) {
 
             mesg[n] = 0;
 
-            // printf("Mensagem recebida: %s", mesg);
-            p_udp_client curr = udplst->list;
-
             if (!remove_udp_client(udplst, mesg)) {
+                p_udp_client curr = udplst->list;
+
                 while (curr != NULL) {
                     snprintf(buf, sizeof(buf), "A|%s", mesg);
 
                     auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
 
-                    int sent = sendto(udpfd, buf, strlen(buf), 0, (struct sockaddr *) &auxaddr, len);
-
-                    printf("Sent: %d\n", sent);
+                    sendto(udpfd, buf, strlen(buf), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
 
                     curr = curr->next;
                 }
 
                 char ip[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &(cliaddr->sin_addr), ip, INET_ADDRSTRLEN); // Convert IP to string
-                int port = ntohs(cliaddr->sin_port);
+                inet_ntop(AF_INET, &(cliaddr.sin_addr), ip, INET_ADDRSTRLEN); // Convert IP to string
+                int port = ntohs(cliaddr.sin_port);
 
                 add_udp_client(udplst, ip, port, nickname);
 
                 // TODO: Enviar mensagem com a lista toda
+                char * nicks = get_all_nicknames(udplst);
+
+                sendto(udpfd, nicks, strlen(nicks), 0, (struct sockaddr *) &cliaddr, len);
+
+                free(nicks);
             } else {
+                p_udp_client curr = udplst->list;
+
                 while (curr != NULL) {
                     snprintf(buf, sizeof(buf), "R|%s", mesg);
 
-                    printf("%s %s", buf, curr->nickname);
+                    auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
 
-                    sendto(udpfd, buf, strlen(buf), 0, curr->cliaddr, sizeof(curr->cliaddr));
+                    sendto(udpfd, buf, strlen(buf), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
 
                     curr = curr->next;
                 }
