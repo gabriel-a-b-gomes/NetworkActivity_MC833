@@ -13,6 +13,7 @@
 #define LISTENQ 10
 #define MAXDATASIZE 100
 #define MAXLINE 4096
+#define MAXNICK 1024
 
 #ifndef FD_SETSIZE
 #define FD_SETSIZE 256
@@ -29,67 +30,84 @@ struct udp_list
 };
 
 struct udp_client {
-    struct sockaddr * cliaddr;
-    char *nickname;
+    char ip[MAXDATASIZE];
+    int port;
+    char nickname[MAXNICK];
     p_udp_client prev;
     p_udp_client next;
 };
 
-p_udp_client create_udp_client(struct sockaddr * cliaddr, char* nickname) {
+p_udp_list create_udp_list() {
+    p_udp_list udplst = malloc(sizeof(struct udp_list));
+
+    udplst->list = NULL;
+
+    return udplst;
+}
+
+p_udp_client create_udp_client(char *ip, int port, char* nickname) {
     p_udp_client new_client = malloc(sizeof(struct udp_client));
 
-    new_client->cliaddr = cliaddr;
+    strcpy(new_client->ip, ip);
     strcpy(new_client->nickname, nickname);
+    new_client->port = port;
     new_client->prev = NULL;
     new_client->next = NULL;
 
     return new_client;
 }
 
-void add_udp_client(p_udp_list udp_list, struct sockaddr * cliaddr, char* nickname) {
-    p_udp_client curr = udp_list->list;
+void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
+    p_udp_client curr = udplst->list;
 
     if (curr == NULL)
-        udp_list->list = create_udp_client(cliaddr, nickname);
+        udplst->list = create_udp_client(ip, port, nickname);
     else{
-        while (curr->next == NULL) {
+        while (curr->next != NULL) {
             curr = curr->next;
         }
 
-        p_udp_client new_client = create_udp_client(cliaddr, nickname);
+        p_udp_client new_client = create_udp_client(ip, port, nickname);
         curr->next = new_client;
         new_client->prev = curr;
     }
 }
 
-int find_udp_client(p_udp_list udp_list, char* nickname) {
-    p_udp_client curr = udp_list->list;
+p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
+    p_udp_client curr = udplst->list;
 
-    if (prev != NULL)
-        while (curr == NULL) {
-            if (strcmp(curr->nickname, nickname) == 0)
-                return curr;
+    while (curr != NULL) {
+        if (strcmp(curr->nickname, nickname) == 0)
+            return curr;
 
-            curr = curr->next;
-        }
+        curr = curr->next;
+    }
 
     return NULL;
 }
 
-void remove_udp_client(p_udp_list udp_list, char* nickname) {
-    p_udp_client curr = udp_list->list;
+int remove_udp_client(p_udp_list udplst, char* nickname) {
+    p_udp_client curr = udplst->list;
 
-    if (prev != NULL)
-        while (curr == NULL) {
-            if (strcmp(curr->nickname, nickname) == 0) {
+    while (curr != NULL) {
+        if (strcmp(curr->nickname, nickname) == 0) {
+            if (curr->prev != NULL)
                 curr->prev->next = curr->next;
+            else
+                udplst->list = curr->next;
+            
+            if (curr->next != NULL)
                 curr->next->prev = curr->prev;
 
-                free(curr);
-            }
+            free(curr);
 
-            curr = curr->next;
+            return 1;
         }
+
+        curr = curr->next;
+    }
+
+    return 0;
 }
 
 
@@ -155,6 +173,17 @@ void Bind(int sockfd, int family, int port) {
         perror("bind");
         exit(1);
     }
+}
+
+struct sockaddr_in MakeAddr(int family, char *ip, int port) {
+    struct sockaddr_in addr_in;
+
+    bzero(&addr_in, sizeof(addr_in));
+    addr_in.sin_family      = family;
+    addr_in.sin_addr.s_addr = htonl(ip);
+    addr_in.sin_port        = htons(port); 
+
+    return addr_in;  
 }
 
 void GetSockName(int sockfd, struct sockaddr* servaddr, socklen_t servaddr_len) {
@@ -284,13 +313,15 @@ int Fork() {
 int main (int argc, char **argv) {
     int                 i, maxi, maxfd, listenfd, udpfd, connfd, sockfd, clifd;
     int                 nready, client[FD_SETSIZE];
-    char                error[MAXLINE + 1], buf[MAXLINE], nickname[MAXLINE], mesg[MAXLINE];
+    char                error[MAXLINE + 1], buf[MAXLINE], nickname[MAXNICK], mesg[MAXNICK];
 
     fd_set              rset, allset;
     ssize_t             n;
     socklen_t           clilen;
     socklen_t           len;
-    struct sockaddr_in  cliaddr, servaddr;
+    struct sockaddr_in  cliaddr, servaddr, auxaddr;
+
+    p_udp_list udplst = create_udp_list();
 
     // Verifica se a porta foi passada como parâmetro
     if (argc != 2) {
@@ -369,18 +400,45 @@ int main (int argc, char **argv) {
             len = sizeof(cliaddr);
             n = recvfrom(udpfd, mesg, MAXLINE, 0, (struct sockaddr *) &cliaddr, &len);
 
-            PrintSockName("Cliente UDP", cliaddr, AF_INET, len);
-
             // Atraves do endereço da mensagem, se o cliente já está na lista, então deve enviar um aviso de exclusão.
             // Se ele é novo, deve enviar um aviso de entrada - instanciar na lista - enviar aviso de adição
 
             mesg[n] = 0;
 
-            printf("Mensagem recebida: %s", mesg);
+            // printf("Mensagem recebida: %s", mesg);
+            p_udp_client curr = udplst->list;
 
-            sendto(udpfd, mesg, n, 0, (struct sockaddr *) &cliaddr, len);
+            if (!remove_udp_client(udplst, mesg)) {
+                while (curr != NULL) {
+                    snprintf(buf, sizeof(buf), "A|%s", mesg);
 
-            // enviar para o cliente atual, uma lista com os nomes 
+                    auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
+
+                    int sent = sendto(udpfd, buf, strlen(buf), 0, (struct sockaddr *) &auxaddr, len);
+
+                    printf("Sent: %d\n", sent);
+
+                    curr = curr->next;
+                }
+
+                char ip[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &(cliaddr->sin_addr), ip, INET_ADDRSTRLEN); // Convert IP to string
+                int port = ntohs(cliaddr->sin_port);
+
+                add_udp_client(udplst, ip, port, nickname);
+
+                // TODO: Enviar mensagem com a lista toda
+            } else {
+                while (curr != NULL) {
+                    snprintf(buf, sizeof(buf), "R|%s", mesg);
+
+                    printf("%s %s", buf, curr->nickname);
+
+                    sendto(udpfd, buf, strlen(buf), 0, curr->cliaddr, sizeof(curr->cliaddr));
+
+                    curr = curr->next;
+                }
+            }
         }
 
         for (i = 0; i <= maxi; i++) {
