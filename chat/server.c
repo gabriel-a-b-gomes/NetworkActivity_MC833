@@ -634,9 +634,9 @@ int main (int argc, char **argv) {
 
                     while (clicurr != NULL)
                     {
-                        if (clicurr->clientfd != sockfd) {
-                            WriteTcpMessage(clicurr->clientfd, curr->nickname, buffertcp);
-                        }
+                        // if (clicurr->clientfd != sockfd) {
+                        WriteTcpMessage(clicurr->clientfd, curr->nickname, buffertcp);
+                        // }
 
                         clicurr = clicurr->next;
                     }
