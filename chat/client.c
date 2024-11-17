@@ -17,7 +17,7 @@
 #define MAXNICK 1024
 
 // Var para receber o nickname
-char   recvline[MAXLINE + 1];
+char   nickname[MAXLINE + 1];
 char   addr[MAXLINE + 1];
 
 int max(int a, int b) {
@@ -167,7 +167,7 @@ void handle_udp_message(p_people_list pop_list, char *message) {
 
             // Add a nickname to the list.
             add_people(pop_list, token); // Example IP and port used.
-            printf("Um usuário entrou no chat: %s", token);
+            printf("Entrou no chat > %s\n", token);
             break;
         
         case 'R':
@@ -175,24 +175,32 @@ void handle_udp_message(p_people_list pop_list, char *message) {
 
             // Remove a nickname from the list.
             if (remove_people(pop_list, token)) {
-                printf("Um usuário saiu do chat: %s", token);
+                printf("Saiu do chat < %s\n", token);
             } 
             break;
 
         case 'L': {
             // Replace the list with nicknames from the payload.
             // Tokenize the payload to separate nicknames.
+            int qtde_people = 0;
             token = strtok(payload, "|");
+
             while (token != NULL) {
                 trim_pipes(token);
                 add_people(pop_list, token); // Example IP and port used.
 
-                if (strcmp(token, recvline) != 0) {
-                    printf("Usuário no chat: %s", token);
+                if (strcmp(token, nickname) != 0) {
+                    printf("No chat > %s\n", token);
+                    qtde_people++;
                 }
 
                 token = strtok(NULL, "|");
+
             }
+
+            if (qtde_people == 0)
+                printf("Você é o único no chat!\n");
+
             break;
         }    
 
@@ -326,6 +334,7 @@ void make_chat(FILE * fp, int sockfd, int udpfd, p_people_list pop_list) {
         }
 
         if (FD_ISSET(udpfd, &rset)) {
+            recvline[0] = 0;
             if ((n = recvfrom(udpfd, recvline, MAXLINE, 0, NULL, NULL)) == 0) {
                 if (stdineof == 1)
                     return;
@@ -363,8 +372,8 @@ void handle_exit_signal(int signum) {
 
     GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
 
-    if (strlen(recvline) > 0) {
-        sendto(udpfd, recvline, strlen(recvline), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
+    if (strlen(nickname) > 0) {
+        sendto(udpfd, nickname, strlen(nickname), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
     }
     // Close the UDP socket and perform any other cleanup
     close(udpfd);
@@ -374,8 +383,8 @@ void handle_exit_signal(int signum) {
 int main(int argc, char **argv) {
     signal(SIGINT, handle_exit_signal);
 
-    int    sockfd, udpfd;
-    char   error[MAXLINE + 1];
+    int    sockfd, udpfd, n;
+    char   error[MAXLINE + 1], recvline[MAXLINE];
     struct sockaddr_in servaddr, udpaddr;
 
     p_people_list pop_list = create_people_list();
@@ -391,11 +400,17 @@ int main(int argc, char **argv) {
     }
 
     printf("Insira seu nome: ");
-    fgets(recvline, MAXLINE, stdin);
+    fgets(nickname, MAXLINE, stdin);
 
-    // size_t len = strlen(recvline);
-    // if (len > 0 && (recvline[len - 1] == '\n' || recvline[len - 1] == '\r')) {
-    //     recvline[len - 1] = '\0';
+    n = strlen(nickname);
+
+    // Tira o \n
+    if (n > 0)
+        nickname[n - 1] = 0;
+
+    // size_t len = strlen(nickname);
+    // if (len > 0 && (nickname[len - 1] == '\n' || nickname[len - 1] == '\r')) {
+    //     nickname[len - 1] = '\0';
     // }
 
     sockfd = Socket(AF_INET, SOCK_STREAM, 0);
@@ -412,6 +427,17 @@ int main(int argc, char **argv) {
     GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
     PrintSockName("Endereço:", servaddr, AF_INET, INET_ADDRSTRLEN);
 
+    write(sockfd, nickname, strlen(nickname));
+
+    n = read(sockfd, recvline, MAXLINE);
+    recvline[n] = 0;
+    if (strcmp(recvline, "R") == 0) {
+        close(sockfd);
+        printf("AVISO: Já existe uma pessoa com esse nome no chat!\n");
+
+        exit(0);
+    }
+
     udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
@@ -425,21 +451,7 @@ int main(int argc, char **argv) {
     GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
     PrintSockName("Server UDP", udpaddr, AF_INET, INET_ADDRSTRLEN);
 
-    // FILE * entryfp = OpenFile(argv[4], "r");
-    // FILE * exitfp = OpenFile(argv[5], "w");
-
-    // str_cli(entryfp, exitfp, sockfd, sockfd2);
-
-    // if (n < 0) {
-    //     perror("read error");
-    //     exit(1);
-    // }
-
-    // CloseFile(entryfp);
-    // CloseFile(exitfp);
-
-    write(sockfd, recvline, strlen(recvline));
-    sendto(udpfd, recvline, strlen(recvline), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
+    sendto(udpfd, nickname, strlen(nickname), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
 
     make_chat(stdin, sockfd, udpfd, pop_list);
 

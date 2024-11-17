@@ -59,7 +59,6 @@ p_udp_client create_udp_client(char *ip, int port, char* nickname) {
 
 void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
     if (udplst == NULL) {
-        fprintf(stderr, "List is uninitialized or empty\n");
         return;
     }
 
@@ -80,7 +79,6 @@ void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
 
 p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
     if (udplst == NULL || udplst->list == NULL) {
-        fprintf(stderr, "List is uninitialized or empty\n");
         return 0;
     }
 
@@ -98,7 +96,6 @@ p_udp_client find_udp_client(p_udp_list udplst, char* nickname) {
 
 int remove_udp_client(p_udp_list udplst, char* nickname) {
     if (udplst == NULL || udplst->list == NULL) {
-        fprintf(stderr, "List is uninitialized or empty\n");
         return 0;
     }
 
@@ -162,6 +159,107 @@ char* get_all_nicknames(p_udp_list udplst) {
     return result;
 }
 
+// ================ CLIENTS_TCP ================= //
+
+typedef struct tcp_list *p_tcp_list;
+typedef struct tcp_client *p_tcp_client;
+
+struct tcp_list
+{
+    p_tcp_client list;
+};
+
+struct tcp_client {
+    int clientfd;
+    char nickname[MAXNICK];
+    p_tcp_client prev;
+    p_tcp_client next;
+};
+
+p_tcp_list create_tcp_list() {
+    p_tcp_list tcplst = malloc(sizeof(struct tcp_list));
+
+    tcplst->list = NULL;
+
+    return tcplst;
+}
+
+p_tcp_client create_tcp_client(int clientfd, char* nickname) {
+    p_tcp_client new_client = malloc(sizeof(struct tcp_client));
+
+    strcpy(new_client->nickname, nickname);
+    new_client->clientfd = clientfd;
+    new_client->prev = NULL;
+    new_client->next = NULL;
+
+    return new_client;
+}
+
+void add_tcp_client(p_tcp_list tcplst, int clientfd, char* nickname) {
+    if (tcplst == NULL) {
+        return;
+    }
+
+    p_tcp_client curr = tcplst->list;
+
+    if (curr == NULL)
+        tcplst->list = create_tcp_client(clientfd, nickname);
+    else{
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+
+        p_tcp_client new_client = create_tcp_client(clientfd, nickname);
+        curr->next = new_client;
+        new_client->prev = curr;
+    }
+}
+
+p_tcp_client find_tcp_client(p_tcp_list tcplst, char* nickname) {
+    if (tcplst == NULL || tcplst->list == NULL) {
+        return 0;
+    }
+
+    p_tcp_client curr = tcplst->list;
+
+    while (curr != NULL) {
+        if (strcmp(curr->nickname, nickname) == 0)
+            return curr;
+
+        curr = curr->next;
+    }
+
+    return NULL;
+}
+
+int remove_tcp_client(p_tcp_list tcplst, int clientfd) {
+    if (tcplst == NULL || tcplst->list == NULL) {
+        return 0;
+    }
+
+    p_tcp_client curr = tcplst->list;
+
+    while (curr != NULL) {
+        if (curr->clientfd == clientfd) {
+            if (curr->prev != NULL)
+                curr->prev->next = curr->next;
+            else
+                tcplst->list = curr->next;
+            
+            if (curr->next != NULL)
+                curr->next->prev = curr->prev;
+
+            free(curr);
+            curr = NULL;
+
+            return 1;
+        }
+
+        curr = curr->next;
+    }
+
+    return 0;
+}
 
 
 // ==================== FILE ==================== //
@@ -309,6 +407,17 @@ void WriteMessage(int sockfd, char* message) {
     write(sockfd, buf, strlen(buf));
 }
 
+void WriteTcpMessage(int sockfd, char *nickname, char* message) {
+    char   buf[MAXLINE];
+    time_t ticks;
+
+    ticks = time(NULL);
+    snprintf(buf, sizeof(buf), "[%.24s] [%s] %s", ctime(&ticks), nickname, message);
+
+    // Escreve a mensagem de boas vindas para o cliente
+    write(sockfd, buf, strlen(buf));
+}
+
 void Close(int sockfd) {
     close(sockfd);
 }
@@ -366,9 +475,9 @@ int Fork() {
 // ==================== FORK ==================== //
 
 int main (int argc, char **argv) {
-    int                 i, maxi, maxfd, listenfd, udpfd, connfd, sockfd, clifd;
-    int                 nready, client[FD_SETSIZE];
-    char                error[MAXLINE + 1], buf[MAXLINE], nickname[MAXNICK], mesg[MAXNICK];
+    int                 maxfd, listenfd, udpfd, connfd;
+    int                 nready;
+    char                error[MAXLINE + 1], buffertcp[MAXLINE], bufferudp[MAXLINE], nickname[MAXNICK], mesg[MAXNICK];
 
     fd_set              rset, allset;
     ssize_t             n;
@@ -377,6 +486,7 @@ int main (int argc, char **argv) {
     struct sockaddr_in  cliaddr, servaddr, auxaddr;
 
     p_udp_list udplst = create_udp_list();
+    p_tcp_list tcplst = create_tcp_list();
 
     // Verifica se a porta foi passada como parâmetro
     if (argc != 2) {
@@ -408,11 +518,6 @@ int main (int argc, char **argv) {
     FILE *file = OpenFile("server_operation.log");
 
     maxfd = listenfd > udpfd ? listenfd : udpfd;
-    maxi = -1;
-
-    for (i = 0; i < FD_SETSIZE; i++) {
-        client[i] = -1;
-    }
 
     FD_ZERO(&allset);
     FD_SET(listenfd, &allset);
@@ -427,25 +532,39 @@ int main (int argc, char **argv) {
             clilen = sizeof(cliaddr);
             connfd = Accept(listenfd, (struct sockaddr *) &cliaddr, &clilen);
 
-            for (i = 0; i < FD_SETSIZE; i++) {
-                if (client[i] < 0) {
-                    client[i] = connfd;
-                    break;
-                }
-            }
+            // for (i = 0; i < FD_SETSIZE; i++) {
+            //     if (client[i] < 0) {
+            //         client[i] = connfd;
+            //         break;
+            //     }
+            // }
 
-            if (i == FD_SETSIZE) {
-                continue;
-            }
-
-            FD_SET(connfd, &allset);
+            // if (i == FD_SETSIZE) {
+            //     continue;
+            // }
 
             GetNickname(connfd, nickname);
 
+            buffertcp[0] = 0;
+            if (find_tcp_client(tcplst, nickname)) {
+                strcpy(buffertcp, "R");
+
+                write(connfd, buffertcp, strlen(buffertcp));
+                Close(connfd);
+                continue;
+            } else {
+                strcpy(buffertcp, "A");
+
+                write(connfd, buffertcp, strlen(buffertcp));
+            }
+
+            FD_SET(connfd, &allset);
+            add_tcp_client(tcplst, connfd, nickname);
+
             if (connfd > maxfd)
                 maxfd = connfd;
-            if (i > maxi)
-                maxi = i;
+            // if (i > maxi)
+            //     maxi = i;
 
             if (--nready <= 0)
                 continue;
@@ -464,11 +583,11 @@ int main (int argc, char **argv) {
                 p_udp_client curr = udplst->list;
 
                 while (curr != NULL) {
-                    snprintf(buf, sizeof(buf), "A|%s", mesg);
+                    snprintf(bufferudp, sizeof(bufferudp), "A|%s", mesg);
 
                     auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
 
-                    sendto(udpfd, buf, strlen(buf), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
+                    sendto(udpfd, bufferudp, strlen(bufferudp), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
 
                     curr = curr->next;
                 }
@@ -477,7 +596,7 @@ int main (int argc, char **argv) {
                 inet_ntop(AF_INET, &(cliaddr.sin_addr), ip, INET_ADDRSTRLEN); // Convert IP to string
                 int port = ntohs(cliaddr.sin_port);
 
-                add_udp_client(udplst, ip, port, nickname);
+                add_udp_client(udplst, ip, port, mesg);
 
                 // TODO: Enviar mensagem com a lista toda
                 char * nicks = get_all_nicknames(udplst);
@@ -489,42 +608,72 @@ int main (int argc, char **argv) {
                 p_udp_client curr = udplst->list;
 
                 while (curr != NULL) {
-                    snprintf(buf, sizeof(buf), "R|%s", mesg);
+                    snprintf(bufferudp, sizeof(bufferudp), "R|%s", mesg);
 
                     auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
 
-                    sendto(udpfd, buf, strlen(buf), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
+                    sendto(udpfd, bufferudp, strlen(bufferudp), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
 
                     curr = curr->next;
                 }
             }
         }
 
-        for (i = 0; i <= maxi; i++) {
-            if ((sockfd = client[i]) < 0)
-                continue;
+        p_tcp_client curr = tcplst->list;
+        while (curr != NULL) {
+            int sockfd = curr->clientfd;
 
             if (FD_ISSET(sockfd, &rset)) {
-                if ((n = read(sockfd, buf, MAXLINE)) == 0) {
+                if ((n = read(sockfd, buffertcp, MAXLINE)) == 0) {
                     Close(sockfd);
                     FD_CLR(sockfd, &allset);
-                    client[i] = -1;
+                    remove_tcp_client(tcplst, sockfd);
                 } else {
-                    for (int j = 0; j <= maxi; j++) {
-                        if (i == j) continue;
+                    p_tcp_client clicurr = tcplst->list;
+                    buffertcp[n] = 0;
 
-                        if ((clifd = client[j]) < 0)
-                            continue;
-                        
-                        WriteMessage(clifd, buf);
+                    while (clicurr != NULL)
+                    {
+                        if (clicurr->clientfd != sockfd) {
+                            WriteTcpMessage(clicurr->clientfd, curr->nickname, buffertcp);
+                        }
+
+                        clicurr = clicurr->next;
                     }
-                    // write(sockfd, buf, n);
                 }
 
                 if (--nready <= 0)
                     break;
             }
+
+            curr = curr->next;
         }
+
+        // for (i = 0; i <= maxi; i++) {
+        //     if ((sockfd = client[i]) < 0)
+        //         continue;
+
+        //     if (FD_ISSET(sockfd, &rset)) {
+        //         if ((n = read(sockfd, buf, MAXLINE)) == 0) {
+        //             Close(sockfd);
+        //             FD_CLR(sockfd, &allset);
+        //             client[i] = -1;
+        //         } else {
+        //             for (int j = 0; j <= maxi; j++) {
+        //                 if (i == j) continue;
+
+        //                 if ((clifd = client[j]) < 0)
+        //                     continue;
+                        
+        //                 WriteMessage(clifd, buf);
+        //             }
+        //             // write(sockfd, buf, n);
+        //         }
+
+        //         if (--nready <= 0)
+        //             break;
+        //     }
+        // }
     }
 
     CloseFile(file);
