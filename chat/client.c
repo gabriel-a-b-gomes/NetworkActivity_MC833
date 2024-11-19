@@ -17,14 +17,14 @@
 #define MAXLINE 2048
 #define MAXNICK 1024
 
-// Var para receber o nickname
-char   nickname[MAXLINE + 1];
-char   addr[MAXLINE + 1];
+// Visiveis em toda a aplicacao
+char    g_nickname[MAXLINE + 1];
+char    addr_chat[MAXLINE + 1];
+int     tcpPort, udpPort;
 
 int max(int a, int b) {
     return a >= b ? a : b;
 }
-
 
 // Function to trim leading and trailing '|' characters from a string.
 void trim_pipes(char *str) {
@@ -75,6 +75,23 @@ p_people create_people(char* nickname) {
     new_people->next = NULL;
 
     return new_people;
+}
+
+void destroy_people_list(p_people_list pop_list) {
+    if (pop_list == NULL || pop_list->list == NULL) {
+        return;
+    }
+
+    p_people curr = pop_list->list;
+    p_people next = NULL;
+
+    while (curr != NULL) {
+        next = curr->next;
+        free(curr);
+        curr = next;
+    }
+
+    free(pop_list);
 }
 
 void add_people(p_people_list pop_list, char* nickname) {
@@ -198,7 +215,7 @@ void handle_udp_message(p_people_list pop_list, char *message) {
                 trim_pipes(token);
                 add_people(pop_list, token); // Example IP and port used.
 
-                if (strcmp(token, nickname) != 0) {
+                if (strcmp(token, g_nickname) != 0) {
                     printf("No chat > %s\n", token);
                     qtde_people++;
                 }
@@ -377,12 +394,14 @@ void handle_exit_signal(int signum) {
     udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(udpfd, addr, 4444, AF_INET);
+    Connect(udpfd, addr_chat, udpPort, AF_INET);
 
     GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
 
-    if (strlen(nickname) > 0) {
-        sendto(udpfd, nickname, strlen(nickname), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
+    int n = strlen(g_nickname);
+
+    if (n > 0) {
+        sendto(udpfd, g_nickname, n, 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
     }
     // Close the UDP socket and perform any other cleanup
     close(udpfd);
@@ -410,34 +429,27 @@ int main(int argc, char **argv) {
     }
 
     printf("Insira seu nome: ");
-    fgets(nickname, MAXLINE, stdin);
+    fgets(g_nickname, MAXLINE, stdin);
 
-    n = strlen(nickname);
+    n = strlen(g_nickname);
 
     // Tira o \n
     if (n > 0)
-        nickname[n - 1] = 0;
-
-    // size_t len = strlen(nickname);
-    // if (len > 0 && (nickname[len - 1] == '\n' || nickname[len - 1] == '\r')) {
-    //     nickname[len - 1] = '\0';
-    // }
+        g_nickname[n - 1] = 0;
 
     sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
-    strcpy(addr, argv[1]);
-    // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(sockfd, addr, atoi(argv[2]), AF_INET);
+    strcpy(addr_chat, argv[1]);
+    tcpPort = atoi(argv[2]);
+    udpPort = atoi(argv[3]);
 
-    // Obtem as informações do socket local e imprime o IP e Porta
-    GetSockName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    // Conecta-se com o socket servidor a partir dos parâmetros de entrada
+    Connect(sockfd, addr_chat, tcpPort, AF_INET);
+
+    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
     PrintSockName("Bem vindo ao chat!", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    // Obtem as informações do socket servidor e imprime seu IP e Porta
-    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Endereço:", servaddr, AF_INET, INET_ADDRSTRLEN);
-
-    write(sockfd, nickname, strlen(nickname));
+    write(sockfd, g_nickname, strlen(g_nickname));
 
     n = read(sockfd, recvline, MAXLINE);
     recvline[n] = 0;
@@ -451,27 +463,21 @@ int main(int argc, char **argv) {
     udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(udpfd, addr, atoi(argv[3]), AF_INET);
+    Connect(udpfd, addr_chat, udpPort, AF_INET);
 
-    // Obtem as informações do socket local e imprime o IP e Porta
-    GetSockName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
-    PrintSockName("Server UDP", udpaddr, AF_INET, INET_ADDRSTRLEN);
-
-    // Obtem as informações do socket servidor e imprime seu IP e Porta
     GetPeerName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));
-    PrintSockName("Server UDP", udpaddr, AF_INET, INET_ADDRSTRLEN);
 
-    sendto(udpfd, nickname, strlen(nickname), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
+    sendto(udpfd, g_nickname, strlen(g_nickname), 0, (struct sockaddr *) &udpaddr, sizeof(udpaddr));
 
     make_chat(stdin, sockfd, udpfd, pop_list);
 
     shutdown(sockfd, SHUT_WR);
     shutdown(udpfd, SHUT_WR);
-    // shutdown(sockfd2, SHUT_WR);
+
+    destroy_people_list(pop_list);
 
     close(sockfd);
     close(udpfd);
-    // close(sockfd2);
 
     exit(0);
 }

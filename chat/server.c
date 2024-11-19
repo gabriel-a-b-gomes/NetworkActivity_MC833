@@ -57,6 +57,23 @@ p_udp_client create_udp_client(char *ip, int port, char* nickname) {
     return new_client;
 }
 
+void destroy_udp_clients(p_udp_list udplst) {
+    if (udplst == NULL || udplst->list == NULL) {
+        return;
+    }
+
+    p_udp_client curr = udplst->list;
+    p_udp_client next = NULL;
+
+    while (curr != NULL) {
+        next = curr->next;
+        free(curr);
+        curr = next;
+    }
+
+    free(udplst);
+}
+
 void add_udp_client(p_udp_list udplst, char *ip, int port, char* nickname) {
     if (udplst == NULL) {
         return;
@@ -182,6 +199,23 @@ p_tcp_list create_tcp_list() {
     tcplst->list = NULL;
 
     return tcplst;
+}
+
+void destroy_tcp_clients(p_tcp_list tcplst) {
+    if (tcplst == NULL || tcplst->list == NULL) {
+        return;
+    }
+
+    p_tcp_client curr = tcplst->list;
+    p_tcp_client next = NULL;
+
+    while (curr != NULL) {
+        next = curr->next;
+        free(curr);
+        curr = next;
+    }
+
+    free(tcplst);
 }
 
 p_tcp_client create_tcp_client(int clientfd, char* nickname) {
@@ -461,10 +495,10 @@ int main (int argc, char **argv) {
 
     // Mostra o IP e Porta do servidor socket
     GetSockName(listenfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Socket em execução", servaddr, AF_INET, INET_ADDRSTRLEN);
+    PrintSockName("Chat em execução", servaddr, AF_INET, INET_ADDRSTRLEN);
 
-    char servaddr_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &(servaddr.sin_addr), servaddr_ip, INET_ADDRSTRLEN);
+    GetSockName(udpfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    PrintSockName("Serviço de Notificação em execução", servaddr, AF_INET, INET_ADDRSTRLEN);
 
     // Comeca a escuta por novas conexões
     Listen(listenfd, LISTENQ);
@@ -537,12 +571,11 @@ int main (int argc, char **argv) {
                 }
 
                 char ip[INET_ADDRSTRLEN];
-                inet_ntop(AF_INET, &(cliaddr.sin_addr), ip, INET_ADDRSTRLEN); // Convert IP to string
+                inet_ntop(AF_INET, &(cliaddr.sin_addr), ip, INET_ADDRSTRLEN);
                 int port = ntohs(cliaddr.sin_port);
 
                 add_udp_client(udplst, ip, port, mesg);
 
-                // TODO: Enviar mensagem com a lista toda
                 char * nicks = get_all_nicknames(udplst);
 
                 snprintf(bufferfile, sizeof(bufferfile), "Entrou no chat > %s", mesg);
@@ -605,6 +638,9 @@ int main (int argc, char **argv) {
     }
 
     WriteFile(logs, "Finalizando o chat...");
+
+    destroy_tcp_clients(tcplst);
+    destroy_udp_clients(udplst);
 
     CloseFile(logs);
     return(0);
