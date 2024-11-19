@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/wait.h>
 
@@ -154,6 +155,14 @@ void handle_udp_message(p_people_list pop_list, char *message) {
         return;
     }
 
+    time_t ticks;
+
+    ticks = time(NULL);
+
+    // Retira o \n da mensagem de tempo
+    char *time_str = ctime(&ticks);
+    time_str[strlen(time_str) - 1] = '\0';
+
     char *token;
     // Get the command character.
     char command = message[0];
@@ -167,7 +176,7 @@ void handle_udp_message(p_people_list pop_list, char *message) {
 
             // Add a nickname to the list.
             add_people(pop_list, token); // Example IP and port used.
-            printf("Entrou no chat > %s\n", token);
+            printf("[%.24s] Entrou no chat > %s\n", time_str, token);
             break;
         
         case 'R':
@@ -175,7 +184,7 @@ void handle_udp_message(p_people_list pop_list, char *message) {
 
             // Remove a nickname from the list.
             if (remove_people(pop_list, token)) {
-                printf("Saiu do chat < %s\n", token);
+                printf("[%.24s] Saiu do chat < %s\n", time_str, token);
             } 
             break;
 
@@ -390,11 +399,12 @@ int main(int argc, char **argv) {
     p_people_list pop_list = create_people_list();
 
     // Garante que o IP e Porta do socket servidor foram passados
-    if (argc != 3) {
+    if (argc != 4) {
         strcpy(error,"uso: ");
         strcat(error,argv[0]);
         strcat(error," <IPaddress>");
-        strcat(error," <Port>");
+        strcat(error," <PortTcp>");
+        strcat(error," <PortUdp>");
         perror(error);
         exit(1);
     }
@@ -441,7 +451,7 @@ int main(int argc, char **argv) {
     udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
-    Connect(udpfd, addr, 4444, AF_INET);
+    Connect(udpfd, addr, atoi(argv[3]), AF_INET);
 
     // Obtem as informações do socket local e imprime o IP e Porta
     GetSockName(udpfd, (struct sockaddr*) &udpaddr, sizeof(udpaddr));

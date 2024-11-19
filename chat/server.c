@@ -264,9 +264,9 @@ int remove_tcp_client(p_tcp_list tcplst, int clientfd) {
 
 // ==================== FILE ==================== //
 
-FILE * OpenFile(char * fileName) {
+FILE * OpenFile(char * fileName, char * mode) {
     // Abre o descritor do arquivo baseado no filename
-    FILE *file = fopen(fileName, "w");
+    FILE *file = fopen(fileName, mode);
 
     if (file == NULL) {
         perror("Arquivo não encontrado");
@@ -276,7 +276,7 @@ FILE * OpenFile(char * fileName) {
     return file;
 }
 
-void WriteFile(FILE * file, char * type, char * message, char * addr, int port) {
+void WriteFile(FILE * file, char * message) {
     time_t ticks;
 
     ticks = time(NULL);
@@ -286,7 +286,7 @@ void WriteFile(FILE * file, char * type, char * message, char * addr, int port) 
     time_str[strlen(time_str) - 1] = '\0';
 
     // Escreve no arquivo um novo log, com o tempo, cliente e mensagem
-    fprintf(file, "[%s] Cliente (%s, %d) | <%s> %s\n", time_str, addr, port, type, message);
+    fprintf(file, "[%.24s] %s\n", time_str, message);
     fflush(file);
 }
 
@@ -383,30 +383,6 @@ void PrintSockName(char* description, struct sockaddr_in sockinfos, int family, 
     printf("%s (%s, %d)\n", description, p_addr, ntohs(sockinfos.sin_port));
 }
 
-void WriteWelcomeMessage(int connfd) {
-    char   buf[MAXDATASIZE];
-    time_t ticks;
-
-    ticks = time(NULL);
-    snprintf(buf, sizeof(buf), "Hello from server!\nTime: %.24s\r\n", ctime(&ticks));
-
-    // Escreve a mensagem de boas vindas para o cliente
-    write(connfd, buf, strlen(buf));
-
-    sleep(1);
-}
-
-void WriteMessage(int sockfd, char* message) {
-    char   buf[MAXLINE];
-    time_t ticks;
-
-    ticks = time(NULL);
-    snprintf(buf, sizeof(buf), "[%.24s] %s", ctime(&ticks), message);
-
-    // Escreve a mensagem de boas vindas para o cliente
-    write(sockfd, buf, strlen(buf));
-}
-
 void WriteTcpMessage(int sockfd, char *nickname, char* message) {
     char   buf[MAXLINE];
     time_t ticks;
@@ -420,28 +396,6 @@ void WriteTcpMessage(int sockfd, char *nickname, char* message) {
 
 void Close(int sockfd) {
     close(sockfd);
-}
-
-void Monitoring(int connfd, const char *ip, int port) {
-    char   buffer[MAXLINE];
-
-    time_t t = time(NULL);
-
-    srand(t);
-
-    struct tm *tm_info = localtime(&t);
-    char horario[26];
-    strftime(horario, 26, "%c", tm_info);
-
-    int cpu = rand() % 101;
-    int memoria = rand() % 101;
-    const char *status = (cpu % 2 == 0) ? "Ativo" : "Inativo";
-
-    snprintf(buffer, MAXLINE,
-             "-------------------\nMonitoramento do servidor:\nIP: %s\nPorta: %d\nHorário: %s\nCPU: %d%%\nMemória: %d%%\nStatus: %s\n-------------------",
-             ip, port, horario, cpu, memoria, status);
-
-    write(connfd, buffer, MAXLINE);
 }
 
 char *GetNickname(int connfd, char* nickname) {
@@ -477,7 +431,7 @@ int Fork() {
 int main (int argc, char **argv) {
     int                 maxfd, listenfd, udpfd, connfd;
     int                 nready;
-    char                error[MAXLINE + 1], buffertcp[MAXLINE], bufferudp[MAXLINE], nickname[MAXNICK], mesg[MAXNICK];
+    char                error[MAXLINE + 1], buffertcp[MAXLINE], bufferudp[MAXLINE], bufferfile[MAXLINE + MAXNICK + 10], nickname[MAXNICK], mesg[MAXNICK];
 
     fd_set              rset, allset;
     ssize_t             n;
@@ -489,10 +443,11 @@ int main (int argc, char **argv) {
     p_tcp_list tcplst = create_tcp_list();
 
     // Verifica se a porta foi passada como parâmetro
-    if (argc != 2) {
+    if (argc != 3) {
         strcpy(error,"uso: ");
         strcat(error,argv[0]);
-        strcat(error," <Port>");
+        strcat(error," <PortTcp>");
+        strcat(error," <PortUdp>");
         perror(error);
         exit(1);
     }
@@ -502,7 +457,7 @@ int main (int argc, char **argv) {
 
     // Passa como parâmetro a porta escolhida por onde o socket irá trocar mensagem
     Bind(listenfd, AF_INET, atoi(argv[1]));
-    Bind(udpfd, AF_INET, 4444);
+    Bind(udpfd, AF_INET, atoi(argv[2]));
 
     // Mostra o IP e Porta do servidor socket
     GetSockName(listenfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
@@ -515,7 +470,9 @@ int main (int argc, char **argv) {
     Listen(listenfd, LISTENQ);
 
     // Abertura do arquivo de logs
-    FILE *file = OpenFile("server_operation.log");
+    FILE *logs = OpenFile("chat_operation.log", "a");
+
+    WriteFile(logs, "Iniciando o chat...");
 
     maxfd = listenfd > udpfd ? listenfd : udpfd;
 
@@ -531,17 +488,6 @@ int main (int argc, char **argv) {
         if (FD_ISSET(listenfd, &rset)) {
             clilen = sizeof(cliaddr);
             connfd = Accept(listenfd, (struct sockaddr *) &cliaddr, &clilen);
-
-            // for (i = 0; i < FD_SETSIZE; i++) {
-            //     if (client[i] < 0) {
-            //         client[i] = connfd;
-            //         break;
-            //     }
-            // }
-
-            // if (i == FD_SETSIZE) {
-            //     continue;
-            // }
 
             GetNickname(connfd, nickname);
 
@@ -563,8 +509,6 @@ int main (int argc, char **argv) {
 
             if (connfd > maxfd)
                 maxfd = connfd;
-            // if (i > maxi)
-            //     maxi = i;
 
             if (--nready <= 0)
                 continue;
@@ -582,9 +526,9 @@ int main (int argc, char **argv) {
             if (!remove_udp_client(udplst, mesg)) {
                 p_udp_client curr = udplst->list;
 
-                while (curr != NULL) {
-                    snprintf(bufferudp, sizeof(bufferudp), "A|%s", mesg);
+                snprintf(bufferudp, sizeof(bufferudp), "A|%s", mesg);
 
+                while (curr != NULL) {
                     auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
 
                     sendto(udpfd, bufferudp, strlen(bufferudp), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
@@ -601,21 +545,28 @@ int main (int argc, char **argv) {
                 // TODO: Enviar mensagem com a lista toda
                 char * nicks = get_all_nicknames(udplst);
 
+                snprintf(bufferfile, sizeof(bufferfile), "Entrou no chat > %s", mesg);
+
+                WriteFile(logs, bufferfile);
+
                 sendto(udpfd, nicks, strlen(nicks), 0, (struct sockaddr *) &cliaddr, len);
 
                 free(nicks);
             } else {
                 p_udp_client curr = udplst->list;
 
+                snprintf(bufferudp, sizeof(bufferudp), "R|%s", mesg);
                 while (curr != NULL) {
-                    snprintf(bufferudp, sizeof(bufferudp), "R|%s", mesg);
-
                     auxaddr = MakeAddr(AF_INET, curr->ip, curr->port);
 
                     sendto(udpfd, bufferudp, strlen(bufferudp), 0, (struct sockaddr *) &auxaddr, sizeof(auxaddr));
 
                     curr = curr->next;
                 }
+
+                snprintf(bufferfile, sizeof(bufferfile), "Saiu do chat < %s", mesg);
+
+                WriteFile(logs, bufferfile);
             }
         }
 
@@ -634,12 +585,15 @@ int main (int argc, char **argv) {
 
                     while (clicurr != NULL)
                     {
-                        // if (clicurr->clientfd != sockfd) {
                         WriteTcpMessage(clicurr->clientfd, curr->nickname, buffertcp);
-                        // }
 
                         clicurr = clicurr->next;
                     }
+
+                    if (n > 0) buffertcp[n - 1] = 0;
+                    snprintf(bufferfile, sizeof(bufferfile), "[%s] %s", curr->nickname, buffertcp);
+
+                    WriteFile(logs, bufferfile);
                 }
 
                 if (--nready <= 0)
@@ -648,34 +602,10 @@ int main (int argc, char **argv) {
 
             curr = curr->next;
         }
-
-        // for (i = 0; i <= maxi; i++) {
-        //     if ((sockfd = client[i]) < 0)
-        //         continue;
-
-        //     if (FD_ISSET(sockfd, &rset)) {
-        //         if ((n = read(sockfd, buf, MAXLINE)) == 0) {
-        //             Close(sockfd);
-        //             FD_CLR(sockfd, &allset);
-        //             client[i] = -1;
-        //         } else {
-        //             for (int j = 0; j <= maxi; j++) {
-        //                 if (i == j) continue;
-
-        //                 if ((clifd = client[j]) < 0)
-        //                     continue;
-                        
-        //                 WriteMessage(clifd, buf);
-        //             }
-        //             // write(sockfd, buf, n);
-        //         }
-
-        //         if (--nready <= 0)
-        //             break;
-        //     }
-        // }
     }
 
-    CloseFile(file);
+    WriteFile(logs, "Finalizando o chat...");
+
+    CloseFile(logs);
     return(0);
 }

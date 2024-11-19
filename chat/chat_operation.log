@@ -1,0 +1,11 @@
+[Mon Nov 18 21:15:13 2024] Iniciando o chat...
+[Mon Nov 18 21:15:24 2024] Entrou no chat > Gabriel
+[Mon Nov 18 21:15:34 2024] [Gabriel] Teste de mensagem unica
+[Mon Nov 18 21:15:45 2024] Entrou no chat > Ingrid
+[Mon Nov 18 21:15:52 2024] [Gabriel] Ei, chegou mais uma
+[Mon Nov 18 21:16:04 2024] [Ingrid] Olá
+[Mon Nov 18 21:20:39 2024] Saiu do chat < Gabriel
+[Mon Nov 18 21:20:40 2024] Saiu do chat < Ingrid
+[Mon Nov 18 21:20:52 2024] Iniciando o chat...
+[Mon Nov 18 21:21:03 2024] Entrou no chat > Gabriel
+[Mon Nov 18 21:21:24 2024] Saiu do chat < Gabriel
