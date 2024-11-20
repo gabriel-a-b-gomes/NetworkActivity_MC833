@@ -446,9 +446,6 @@ int main(int argc, char **argv) {
     // Conecta-se com o socket servidor a partir dos parâmetros de entrada
     Connect(sockfd, addr_chat, tcpPort, AF_INET);
 
-    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
-    PrintSockName("Bem vindo ao chat!", servaddr, AF_INET, INET_ADDRSTRLEN);
-
     write(sockfd, g_nickname, strlen(g_nickname));
 
     n = read(sockfd, recvline, MAXLINE);
@@ -459,6 +456,9 @@ int main(int argc, char **argv) {
 
         exit(0);
     }
+
+    GetPeerName(sockfd, (struct sockaddr*) &servaddr, sizeof(servaddr));
+    PrintSockName("Bem vindo ao chat!", servaddr, AF_INET, INET_ADDRSTRLEN);
 
     udpfd = Socket(AF_INET, SOCK_DGRAM, 0);
 

@@ -61,4 +61,4 @@ Teste de Mensagem
 [Tue Nov 19 19:53:54 2024] [MC833] Teste de Mensagem
 ```
 
-Para sair do chat, basta apertar ctrl+C
+Para se desconectar do chat, basta apertar ctrl+C
